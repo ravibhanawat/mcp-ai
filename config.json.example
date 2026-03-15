@@ -1,0 +1,27 @@
+{
+  "sap": {
+    "connection_type": "mock",
+    "system_url": "",
+    "client": "100",
+    "auth_type": "basic",
+    "username": "",
+    "password": "",
+    "oauth_client_id": "",
+    "oauth_client_secret": "",
+    "oauth_token_url": "",
+    "x509_cert_path": "",
+    "verify_ssl": true,
+    "timeout": 30
+  },
+  "mcp": {
+    "builtin_enabled": true,
+    "transport": "stdio",
+    "sse_host": "0.0.0.0",
+    "sse_port": 8001,
+    "custom_servers": []
+  },
+  "ollama": {
+    "url": "http://localhost:11434",
+    "default_model": "llama3.2"
+  }
+}

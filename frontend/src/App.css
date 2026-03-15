@@ -1,0 +1,904 @@
+/* ─── Layout ─────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ─── Top Bar ─────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 56px;
+  background: var(--sap-blue);
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,112,210,0.3);
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.topbar-logo {
+  width: 36px;
+  height: 36px;
+  background: white;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--sap-blue);
+  letter-spacing: -0.5px;
+}
+.topbar-title { font-size: 15px; font-weight: 600; }
+.topbar-subtitle { font-size: 11px; opacity: 0.75; margin-top: 1px; }
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #ccc;
+  flex-shrink: 0;
+}
+.status-dot.connected { background: #2ECC71; }
+.status-dot.disconnected { background: #E74C3C; }
+.status-dot.checking { animation: blink 1s infinite; background: #F39C12; }
+
+/* ─── Body ─────────────────────────────────────── */
+.body-row {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ─── Sidebar ─────────────────────────────────────── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--bg-white);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+.sidebar-modules {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.module-item {
+  padding: 0 8px;
+  margin-bottom: 2px;
+}
+.module-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.module-btn:hover { background: var(--bg-primary); }
+.module-btn.active {
+  background: var(--sap-blue-light);
+  color: var(--sap-blue);
+  font-weight: 600;
+}
+.module-icon {
+  width: 32px; height: 32px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.module-label { display: flex; flex-direction: column; }
+.module-name { font-weight: 600; font-size: 13px; line-height: 1.2; }
+.module-desc { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
+.module-btn.active .module-desc { color: var(--sap-blue); opacity: 0.75; }
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+.reset-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.reset-btn:hover { border-color: var(--error); color: var(--error); background: #FFF5F5; }
+
+/* ─── Main Chat ─────────────────────────────────────── */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* ─── Examples Panel ─────────────────────────────────── */
+.examples-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+.examples-hero {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.examples-hero h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.examples-hero p { font-size: 14px; color: var(--text-secondary); }
+.examples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: 700px;
+}
+.example-chip {
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+.example-chip:hover {
+  border-color: var(--sap-blue);
+  color: var(--sap-blue);
+  background: var(--sap-blue-light);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Messages ─────────────────────────────────────── */
+.messages-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message-row {
+  display: flex;
+  gap: 10px;
+  animation: fadeSlideIn 0.2s ease-out;
+}
+.message-row.user { flex-direction: row-reverse; }
+
+.avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  font-weight: 700;
+}
+.avatar.user-av {
+  background: var(--sap-blue);
+  color: white;
+}
+.avatar.bot-av {
+  background: white;
+  border: 1px solid var(--border);
+  font-size: 16px;
+}
+
+.message-content { max-width: 72%; display: flex; flex-direction: column; gap: 8px; }
+.message-row.user .message-content { align-items: flex-end; }
+
+.message-bubble {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+.message-row.user .message-bubble {
+  background: var(--sap-blue);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.message-row.bot .message-bubble {
+  background: white;
+  color: var(--text-primary);
+  border-bottom-left-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+
+/* ─── Tool Badge ─────────────────────────────────────── */
+.tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: #F0F7FF;
+  border: 1px solid #C7DFF7;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sap-blue);
+  font-family: monospace;
+}
+
+/* ─── Tool Result Card ─────────────────────────────── */
+.tool-result-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  font-size: 13px;
+}
+.tool-result-header {
+  padding: 8px 12px;
+  background: #F7F9FC;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tool-result-body {
+  padding: 12px;
+  overflow-x: auto;
+}
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.result-table th {
+  text-align: left;
+  padding: 5px 10px;
+  background: #F7F9FC;
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.result-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #F0F2F7;
+  color: var(--text-primary);
+}
+.result-table tr:last-child td { border-bottom: none; }
+.result-kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+}
+.kv-key {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.kv-val { font-size: 12px; color: var(--text-primary); word-break: break-word; }
+.kv-val.success { color: var(--success); font-weight: 600; }
+.kv-val.warning { color: var(--warning); font-weight: 600; }
+.kv-val.error { color: var(--error); font-weight: 600; }
+
+/* ─── Typing Indicator ─────────────────────────────── */
+.typing-row { display: flex; align-items: flex-end; gap: 10px; }
+.typing-bubble {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
+  padding: 12px 16px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.typing-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: blink 1.2s infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ─── Input Bar ─────────────────────────────────────── */
+.input-bar {
+  padding: 16px 24px;
+  background: white;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.input-wrapper {
+  flex: 1;
+  position: relative;
+}
+.chat-input {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 48px 11px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+.chat-input:focus { border-color: var(--sap-blue); background: white; }
+.chat-input::placeholder { color: var(--text-muted); }
+.send-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: var(--sap-blue);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.send-btn:hover { background: var(--sap-blue-dark); }
+.send-btn:disabled { background: var(--border); cursor: not-allowed; }
+.model-select {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: white;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.model-select:focus { border-color: var(--sap-blue); }
+
+/* ─── Right Panel ─────────────────────────────────────── */
+.right-panel {
+  width: 280px;
+  flex-shrink: 0;
+  background: white;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.tool-list-item {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: default;
+  transition: all 0.15s;
+}
+.tool-list-item:hover { background: var(--bg-primary); border-color: var(--border); }
+.tool-fn { font-family: monospace; font-size: 12px; font-weight: 600; color: var(--sap-blue); }
+.tool-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
+
+/* ─── Spinner ─────────────────────────────────────── */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ─── Settings Button ─────────────────────────────── */
+.settings-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  border-radius: 8px;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px;
+  transition: background 0.15s;
+  margin-left: 12px;
+}
+.settings-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* ─── Modal Overlay ───────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeSlideIn 0.15s ease-out;
+}
+.modal-box {
+  background: white;
+  border-radius: 16px;
+  width: 640px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: 6px; border: none;
+  background: var(--bg-primary); color: var(--text-secondary);
+  cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.modal-close:hover { background: var(--border); }
+
+/* ─── Modal Tabs ──────────────────────────────────── */
+.modal-tabs {
+  display: flex; gap: 2px;
+  padding: 12px 24px 0;
+  border-bottom: 1px solid var(--border);
+}
+.modal-tab {
+  padding: 8px 16px;
+  border: none; background: transparent;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer; border-radius: 8px 8px 0 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+.modal-tab.active {
+  color: var(--sap-blue);
+  border-bottom-color: var(--sap-blue);
+  background: var(--sap-blue-light);
+}
+.modal-tab:hover:not(.active) { color: var(--text-primary); background: var(--bg-primary); }
+
+/* ─── Modal Body ──────────────────────────────────── */
+.modal-body {
+  flex: 1; overflow-y: auto;
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+/* ─── Form Fields ─────────────────────────────────── */
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.form-input, .form-select {
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: white;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-input:focus, .form-select:focus { border-color: var(--sap-blue); }
+.form-input::placeholder { color: var(--text-muted); }
+.form-input.mono { font-family: monospace; font-size: 12px; }
+.form-hint { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+/* ─── Section separator ───────────────────────────── */
+.form-section-title {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ─── Connection type toggle ──────────────────────── */
+.conn-type-group {
+  display: flex; gap: 8px;
+}
+.conn-type-btn {
+  flex: 1; padding: 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px; background: white;
+  cursor: pointer; text-align: center;
+  transition: all 0.15s;
+}
+.conn-type-btn:hover { border-color: var(--sap-blue); }
+.conn-type-btn.active {
+  border-color: var(--sap-blue);
+  background: var(--sap-blue-light);
+  color: var(--sap-blue);
+}
+.conn-type-icon { font-size: 20px; margin-bottom: 4px; }
+.conn-type-label { font-size: 12px; font-weight: 600; }
+.conn-type-sub { font-size: 11px; color: var(--text-muted); }
+.conn-type-btn.active .conn-type-sub { color: var(--sap-blue); opacity: 0.75; }
+
+/* ─── Test result banner ──────────────────────────── */
+.test-result {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+.test-result.success { background: #F0FDF4; border: 1px solid #BBF7D0; color: #166534; }
+.test-result.error   { background: #FFF5F5; border: 1px solid #FECACA; color: #991B1B; }
+.test-result.testing { background: #F0F9FF; border: 1px solid #BAE6FD; color: #0369A1; }
+
+/* ─── MCP server list ─────────────────────────────── */
+.mcp-server-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg-primary);
+}
+.mcp-server-info { display: flex; flex-direction: column; gap: 2px; }
+.mcp-server-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.mcp-server-url { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.mcp-server-actions { display: flex; gap: 6px; }
+.mcp-badge {
+  padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.mcp-badge.builtin { background: #EAF4FF; color: var(--sap-blue); }
+.mcp-badge.custom  { background: #F5F3FF; color: #7C3AED; }
+.mcp-badge.enabled { background: #F0FDF4; color: #16A34A; }
+.mcp-badge.disabled { background: #F5F5F5; color: var(--text-muted); }
+
+/* ─── Modal Footer ────────────────────────────────── */
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.btn-primary {
+  padding: 9px 20px;
+  background: var(--sap-blue); color: white;
+  border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.btn-primary:hover { background: var(--sap-blue-dark); }
+.btn-primary:disabled { background: var(--border); cursor: not-allowed; color: var(--text-muted); }
+.btn-secondary {
+  padding: 9px 20px;
+  background: white; color: var(--text-secondary);
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-secondary:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+.btn-danger {
+  padding: 6px 12px;
+  background: white; color: var(--error);
+  border: 1px solid var(--error); border-radius: 6px;
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.btn-danger:hover { background: #FFF5F5; }
+.save-status { font-size: 12px; color: var(--success); font-weight: 600; }
+.save-status.error-text { color: var(--error); }
+
+/* ─── Login Screen ────────────────────────────────── */
+.login-screen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0070D2 0%, #004FA3 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.25);
+  animation: fadeSlideIn 0.25s ease-out;
+}
+.login-logo-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+.login-logo {
+  width: 56px; height: 56px;
+  background: var(--sap-blue);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 20px;
+  color: white;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 16px rgba(0,112,210,0.4);
+}
+.login-title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+.login-subtitle {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 28px;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-error {
+  padding: 10px 14px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  color: #DC2626;
+  font-size: 13px;
+}
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+.login-demo-hint {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.login-demo-hint code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--sap-blue);
+}
+
+/* ─── Dev Warning Banner ──────────────────────────── */
+.dev-warning-bar {
+  background: #FFFBEB;
+  border-bottom: 1px solid #FCD34D;
+  padding: 8px 24px;
+  font-size: 12px;
+  color: #92400E;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.dev-warning-bar code {
+  background: #FEF3C7;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+}
+.dev-warning-bar button {
+  background: none; border: none;
+  color: #92400E; cursor: pointer;
+  font-size: 14px; flex-shrink: 0;
+}
+
+/* ─── SAP Source Badge ────────────────────────────── */
+.sap-source-badge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #0369A1;
+  margin-top: 2px;
+}
+.sap-source-icon { font-size: 12px; }
+.sap-source-badge strong { font-weight: 700; color: #0C4A6E; }
+.sap-source-sep { color: #93C5FD; }
+.sap-source-detail { color: #0369A1; opacity: 0.85; }
+
+/* ─── Request ID badge ────────────────────────────── */
+.req-id-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+}
+
+/* ─── User Chip (topbar) ──────────────────────────── */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 10px;
+  padding: 5px 10px 5px 6px;
+  cursor: default;
+}
+.user-chip-avatar {
+  width: 26px; height: 26px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12px; color: white;
+  flex-shrink: 0;
+}
+.user-chip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.user-chip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  line-height: 1;
+}
+.logout-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.logout-btn:hover { color: white; }
+
+/* ─── Role Tag ────────────────────────────────────── */
+.role-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* ─── Tool T-code badge (right panel) ────────────── */
+.tool-tcode-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #EAF4FF;
+  border: 1px solid #C7DFF7;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sap-blue);
+  font-family: monospace;
+}
+
+/* ─── User Management Row ─────────────────────────── */
+.user-mgmt-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-primary);
+}
+
+/* ─── Audit Table ────────────────────────────────── */
+.audit-table { font-size: 11px; }
+.audit-table th { font-size: 10px; }
+.audit-table td { font-size: 11px; }
+
+/* ─── Animations ──────────────────────────────────── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 1; }
+}

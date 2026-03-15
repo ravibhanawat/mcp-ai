@@ -1,0 +1,38 @@
+[
+  {
+    "user_id": "admin",
+    "full_name": "System Administrator",
+    "email": "admin@company.com",
+    "roles": ["admin"],
+    "active": true,
+    "salt": "generate_with_secrets_module",
+    "password_hash": "generate_with_hashlib_sha256"
+  },
+  {
+    "user_id": "fi_user",
+    "full_name": "Finance Analyst",
+    "email": "finance@company.com",
+    "roles": ["fi_co_analyst"],
+    "active": true,
+    "salt": "generate_with_secrets_module",
+    "password_hash": "generate_with_hashlib_sha256"
+  },
+  {
+    "user_id": "hr_user",
+    "full_name": "HR Manager",
+    "email": "hr@company.com",
+    "roles": ["hr_manager"],
+    "active": true,
+    "salt": "generate_with_secrets_module",
+    "password_hash": "generate_with_hashlib_sha256"
+  },
+  {
+    "user_id": "demo",
+    "full_name": "Demo User",
+    "email": "demo@company.com",
+    "roles": ["read_only"],
+    "active": true,
+    "salt": "generate_with_secrets_module",
+    "password_hash": "generate_with_hashlib_sha256"
+  }
+]
