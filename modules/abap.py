@@ -14,7 +14,7 @@ def get_abap_program(program_name: str) -> dict[str, Any]:
     prog = ABAP_PROGRAMS.get(program_name.upper())
     if not prog:
         return {"status": "ERROR", "message": f"ABAP program '{program_name}' not found"}
-    return {"status": "OK", "program_name": program_name.upper(), **prog}
+    return {"status": "OK", "program_name": program_name.upper(), **{k if k != "status" else "program_status": v for k, v in prog.items()}}
 
 
 def get_function_module(fm_name: str) -> dict[str, Any]:

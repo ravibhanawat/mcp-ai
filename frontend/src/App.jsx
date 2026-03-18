@@ -1,5 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import abap from 'react-syntax-highlighter/dist/esm/languages/prism/abap'
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import jsonLang from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+
+SyntaxHighlighter.registerLanguage('abap', abap)
+SyntaxHighlighter.registerLanguage('sql', sql)
+SyntaxHighlighter.registerLanguage('javascript', javascript)
+SyntaxHighlighter.registerLanguage('python', python)
+SyntaxHighlighter.registerLanguage('json', jsonLang)
 
 const API = '/api'
 
@@ -76,6 +91,67 @@ const ROLE_COLORS = {
   pp_planner:     '#0891B2',
   abap_developer: '#64748B',
   read_only:      '#94A3B8',
+}
+
+// ─── Markdown Renderer ────────────────────────────────────────────────────────
+// Renders markdown with GFM tables and ABAP/SQL/JSON syntax highlighting.
+const MD_COMPONENTS = {
+  code({ node, inline, className, children, ...props }) {
+    const lang = (className || '').replace('language-', '').toLowerCase() || 'abap'
+    const code = String(children).replace(/\n$/, '')
+    if (inline) {
+      return <code className="inline-code" {...props}>{children}</code>
+    }
+    return (
+      <div className="code-block-wrap">
+        <div className="code-block-header">
+          <span className="code-lang-badge">{lang.toUpperCase()}</span>
+          <button
+            className="code-copy-btn"
+            onClick={() => navigator.clipboard.writeText(code)}
+            title="Copy to clipboard"
+          >Copy</button>
+        </div>
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={lang}
+          PreTag="div"
+          customStyle={{ margin: 0, borderRadius: '0 0 8px 8px', fontSize: 12, lineHeight: 1.5 }}
+          {...props}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
+    )
+  },
+  table({ children }) {
+    return (
+      <div className="md-table-wrap">
+        <table className="md-table">{children}</table>
+      </div>
+    )
+  },
+  th({ children }) { return <th className="md-th">{children}</th> },
+  td({ children, ...props }) {
+    const val = String(children)
+    return <td className={`md-td ${statusClass(val)}`}>{children}</td>
+  },
+  a({ href, children }) {
+    return <a href={href} target="_blank" rel="noreferrer" className="md-link">{children}</a>
+  },
+  blockquote({ children }) {
+    return <blockquote className="md-blockquote">{children}</blockquote>
+  },
+}
+
+function MarkdownMessage({ content, className = '' }) {
+  return (
+    <div className={`markdown-body ${className}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -259,20 +335,84 @@ function ToolResult({ result }) {
   )
 }
 
+// ─── Research Report Display ───────────────────────────────────────────────────
+function AnomalyPanel({ anomalies }) {
+  if (!anomalies || anomalies.length === 0) return null
+  const icon = { HIGH: '🔴', MEDIUM: '🟠', LOW: '🟡' }
+  const bg   = { HIGH: '#FEE2E2', MEDIUM: '#FFF7ED', LOW: '#FEFCE8' }
+  const border = { HIGH: '#FCA5A5', MEDIUM: '#FED7AA', LOW: '#FEF08A' }
+  return (
+    <div className="anomaly-panel">
+      <div className="anomaly-header">Anomalies & Alerts ({anomalies.length})</div>
+      {anomalies.map((a, i) => (
+        <div key={i} className="anomaly-item" style={{ background: bg[a.severity], borderLeft: `3px solid ${border[a.severity]}` }}>
+          <span className="anomaly-icon">{icon[a.severity] || '⚪'}</span>
+          <span className="anomaly-severity" style={{ color: a.severity === 'HIGH' ? '#DC2626' : a.severity === 'MEDIUM' ? '#D97706' : '#CA8A04' }}>
+            {a.severity}
+          </span>
+          <span className="anomaly-msg">{a.message}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ResearchReport({ result }) {
+  const [expanded, setExpanded] = useState(true)
+  if (!result || !result.formatted_report) return null
+  return (
+    <div className="research-report-card">
+      <div className="research-report-header" onClick={() => setExpanded(e => !e)}>
+        <span>Research Report</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {result.entity_id && <span className="entity-badge">{result.entity_id}</span>}
+          {result.tools_run && result.tools_run.length > 0 && (
+            <span className="tools-count-badge">{result.tools_run.length} tools</span>
+          )}
+          <span>{expanded ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div className="research-report-body">
+          <AnomalyPanel anomalies={result.anomalies} />
+          <div className="research-tools-used">
+            {(result.tools_run || []).map(t => (
+              <span key={t} className="tool-badge" style={{ fontSize: 10 }}>⚡ {t}</span>
+            ))}
+          </div>
+          <MarkdownMessage content={result.formatted_report} className="research-markdown-body" />
+          {result.sources_used && result.sources_used.length > 0 && (
+            <div className="research-sources">
+              <span>SAP Sources: </span>
+              {result.sources_used.map((s, i) => <span key={i} className="sap-src-chip">{s}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 function MessageRow({ msg }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`message-row ${isUser ? 'user' : 'bot'}`}>
-      <div className={`avatar ${isUser ? 'user-av' : 'bot-av'}`}>{isUser ? 'U' : '🤖'}</div>
+      <div className={`avatar ${isUser ? 'user-av' : 'bot-av'}`}>{isUser ? 'U' : msg.research_mode ? '🔬' : '🤖'}</div>
       <div className="message-content">
-        <div className="message-bubble">{msg.content}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {msg.tool_called && <span className="tool-badge">⚡ {msg.tool_called}</span>}
+        {msg.research_mode
+          ? <ResearchReport result={msg.research_result} />
+          : msg.role === 'user'
+            ? <div className="message-bubble">{msg.content}</div>
+            : <div className="message-bubble bot-bubble"><MarkdownMessage content={msg.content} /></div>
+        }
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          {msg.tool_called && !msg.research_mode && <span className="tool-badge">⚡ {msg.tool_called}</span>}
+          {msg.research_mode && <span className="research-mode-badge">AUTO RESEARCH</span>}
           {msg.request_id && <span className="req-id-badge">ID: {msg.request_id.slice(0,8)}</span>}
         </div>
-        {msg.tool_result && <ToolResult result={msg.tool_result} />}
-        {msg.sap_source  && <SapSourceBadge source={msg.sap_source} />}
+        {!msg.research_mode && msg.tool_result && <ToolResult result={msg.tool_result} />}
+        {!msg.research_mode && msg.sap_source  && <SapSourceBadge source={msg.sap_source} />}
       </div>
     </div>
   )
@@ -826,6 +966,7 @@ export default function App() {
   const [sapMode, setSapMode]             = useState('mock')
   const [tools, setTools]                 = useState([])
   const [showSettings, setShowSettings]   = useState(false)
+  const [researchMode, setResearchMode]   = useState(false)
 
   // Auth state
   const [authToken, setAuthToken]         = useState(() => localStorage.getItem('sap_agent_token'))
@@ -920,7 +1061,47 @@ export default function App() {
     }).catch(() => {})
   }
 
+  const sendResearch = useCallback(async (text) => {
+    const msg = text.trim()
+    if (!msg || loading) return
+    setMessages(prev => [...prev, { role: 'user', content: msg }])
+    setInput('')
+    setLoading(true)
+    try {
+      const res = await apiFetch('/research', {
+        method: 'POST',
+        body: JSON.stringify({ query: msg }),
+      })
+      if (res.status === 401) { handleLogout(); return }
+      const data = await res.json()
+      if (!res.ok) {
+        setMessages(prev => [...prev, { role: 'bot', content: `Error: ${data.detail || 'Unknown error'}`, research_mode: false }])
+        return
+      }
+      setMessages(prev => [...prev, {
+        role: 'bot',
+        content: data.report,
+        research_mode: true,
+        research_result: {
+          formatted_report: data.report,
+          anomalies: data.anomalies || [],
+          tools_run: data.tools_used || [],
+          sources_used: data.sap_sources || [],
+          entity_type: data.entity_type,
+          entity_id: data.entity_id,
+        },
+        request_id: data.request_id,
+      }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'bot', content: 'Error: Could not reach the SAP AI Agent API. Make sure the server is running on port 8000.' }])
+    } finally {
+      setLoading(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }, [loading, handleLogout])
+
   const sendMessage = useCallback(async (text) => {
+    if (researchMode) return sendResearch(text)
     const msg = text.trim()
     if (!msg || loading) return
     setMessages(prev => [...prev, { role: 'user', content: msg }])
@@ -951,7 +1132,7 @@ export default function App() {
       setLoading(false)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
-  }, [loading, model, handleLogout])
+  }, [loading, model, handleLogout, researchMode, sendResearch])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
@@ -1043,19 +1224,32 @@ export default function App() {
           )}
 
           <div className="input-bar">
-            <select className="model-select" value={model} onChange={e => setModel(e.target.value)} title="Select Ollama model">
+            <select className="model-select" value={model} onChange={e => setModel(e.target.value)} title="Select Ollama model" disabled={researchMode}>
               {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
+            <button
+              className={`research-toggle-btn ${researchMode ? 'active' : ''}`}
+              onClick={() => setResearchMode(r => !r)}
+              title="Toggle Auto Research mode — chains multiple SAP tools automatically"
+            >
+              🔬 {researchMode ? 'Research ON' : 'Research'}
+            </button>
             <div className="input-wrapper">
               <textarea
                 ref={inputRef} className="chat-input" rows={1}
                 value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={`Ask about ${currentModule.name}… (Enter to send, Shift+Enter for newline)`}
+                placeholder={researchMode
+                  ? 'Research any SAP entity — e.g. "research vendor V001" or "deep dive on MAT002"'
+                  : `Ask about ${currentModule.name}… (Enter to send, Shift+Enter for newline)`
+                }
                 disabled={loading}
+                style={researchMode ? { borderColor: '#7C3AED', boxShadow: '0 0 0 2px #7C3AED22' } : {}}
               />
-              <button className="send-btn" onClick={() => sendMessage(input)} disabled={!input.trim() || loading} title="Send">
-                {loading ? <div className="spinner" /> : '↑'}
+              <button className="send-btn" onClick={() => sendMessage(input)} disabled={!input.trim() || loading} title="Send"
+                style={researchMode ? { background: '#7C3AED' } : {}}
+              >
+                {loading ? <div className="spinner" /> : researchMode ? '🔬' : '↑'}
               </button>
             </div>
           </div>

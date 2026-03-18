@@ -902,3 +902,277 @@
   0%, 100% { opacity: 0.3; }
   50%       { opacity: 1; }
 }
+
+/* ─── Auto Research ───────────────────────────────── */
+.research-toggle-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #7C3AED;
+  background: white;
+  color: #7C3AED;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.research-toggle-btn:hover { background: #F5F3FF; }
+.research-toggle-btn.active {
+  background: #7C3AED;
+  color: white;
+  box-shadow: 0 2px 8px #7C3AED44;
+}
+
+.research-mode-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #7C3AED;
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+/* ─── Research Report Card ────────────────────────── */
+.research-report-card {
+  border: 1.5px solid #7C3AED44;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 4px;
+  max-width: 100%;
+}
+.research-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #7C3AED11, #A855F711);
+  border-bottom: 1px solid #7C3AED22;
+  font-weight: 600;
+  font-size: 13px;
+  color: #5B21B6;
+  cursor: pointer;
+  user-select: none;
+}
+.research-report-body {
+  padding: 12px 14px;
+  background: white;
+}
+
+.research-markdown {
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary);
+  margin: 8px 0;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.research-tools-used {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.research-sources {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.sap-src-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.entity-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  background: #7C3AED22;
+  color: #5B21B6;
+  border-radius: 8px;
+}
+.tools-count-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #0070D222;
+  color: #0070D2;
+  border-radius: 6px;
+}
+
+/* ─── Anomaly Panel ───────────────────────────────── */
+.anomaly-panel {
+  margin-bottom: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #FCA5A5;
+}
+.anomaly-header {
+  padding: 6px 12px;
+  background: #FEE2E2;
+  font-size: 11px;
+  font-weight: 700;
+  color: #DC2626;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.anomaly-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-top: 1px solid #FCA5A533;
+}
+.anomaly-icon { font-size: 14px; flex-shrink: 0; }
+.anomaly-severity {
+  font-weight: 700;
+  font-size: 10px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.anomaly-msg { color: var(--text-primary); line-height: 1.4; }
+
+/* ─── Markdown Body ────────────────────────────────── */
+.markdown-body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+.markdown-body p  { margin: 0 0 8px; }
+.markdown-body p:last-child { margin-bottom: 0; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+.markdown-body h1 { font-size: 16px; }
+.markdown-body h2 { font-size: 15px; color: var(--sap-blue); }
+.markdown-body h3 { font-size: 13px; color: var(--text-secondary); }
+.markdown-body ul, .markdown-body ol {
+  margin: 4px 0 8px 18px;
+  padding: 0;
+}
+.markdown-body li { margin-bottom: 3px; }
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+.markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+/* bot bubble gets no fixed background so markdown renders cleanly */
+.bot-bubble {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
+}
+
+/* ─── Inline code ──────────────────────────────────── */
+.inline-code {
+  font-family: 'Menlo', 'Monaco', 'Fira Code', monospace;
+  font-size: 12px;
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #0F172A;
+}
+
+/* ─── Code Block ───────────────────────────────────── */
+.code-block-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 8px 0;
+  border: 1px solid #2D3748;
+  font-size: 12px;
+}
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #1A202C;
+  border-bottom: 1px solid #2D3748;
+}
+.code-lang-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #68D391;
+  letter-spacing: 0.8px;
+  font-family: monospace;
+}
+.code-copy-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #4A5568;
+  background: transparent;
+  color: #A0AEC0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.code-copy-btn:hover { background: #2D3748; color: white; }
+
+/* ─── Markdown Table ───────────────────────────────── */
+.md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.md-th {
+  background: var(--sap-blue);
+  color: white;
+  padding: 7px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.md-td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.md-table tbody tr:last-child .md-td { border-bottom: none; }
+.md-table tbody tr:hover { background: var(--bg-secondary); }
+.md-td.success { color: #16A34A; font-weight: 600; }
+.md-td.error   { color: #DC2626; font-weight: 600; }
+.md-td.warning { color: #D97706; font-weight: 600; }
+
+/* ─── Markdown misc ────────────────────────────────── */
+.md-link { color: var(--sap-blue); text-decoration: underline; }
+.md-blockquote {
+  border-left: 3px solid var(--sap-blue);
+  margin: 8px 0;
+  padding: 4px 12px;
+  background: #EAF4FF;
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Research report uses markdown body with tighter spacing */
+.research-markdown-body { font-size: 12px; }
+.research-markdown-body h2 { font-size: 14px; margin: 8px 0 4px; }
+.research-markdown-body h3 { font-size: 12px; margin: 8px 0 4px; color: #5B21B6; }

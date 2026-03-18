@@ -6,6 +6,7 @@ so answers can be verified directly in SAP — a Trust requirement.
 """
 import json
 from modules import fi_co, mm, sd, hr, pp, abap
+from modules.sap_knowledge_base import search_sap_docs
 
 # ─────────────────────────────────────────
 # SAP SOURCE ATTRIBUTION
@@ -49,6 +50,8 @@ SAP_SOURCES: dict[str, dict] = {
     "get_transport_request":    {"bapi": "N/A",  "tcode": "SE10",  "table": "E070",   "verify": "T-code SE10 → Transport Organizer"},
     "list_abap_programs":       {"bapi": "N/A",  "tcode": "SE80",  "table": "TRDIR",  "verify": "T-code SE80 → Object Navigator"},
     "analyze_abap_syntax":      {"bapi": "N/A",  "tcode": "SE38",  "table": "N/A",    "verify": "T-code SE38 → ABAP Editor (Syntax Check)"},
+    # Knowledge Base
+    "search_sap_docs":          {"bapi": "N/A",  "tcode": "N/A",   "table": "N/A",    "verify": "SAP Knowledge Base (built-in)"},
 }
 
 
@@ -410,6 +413,29 @@ TOOLS = [
             "required": ["code_snippet"]
         }
     },
+    # ── Knowledge Base / Documentation Tool ──
+    {
+        "name": "search_sap_docs",
+        "description": (
+            "Search SAP documentation, T-codes, BAPIs, and process guides. "
+            "Use when the user asks HOW to do something in SAP, asks about a T-code, BAPI, "
+            "business process (P2P, O2C, onboarding), configuration, or error resolution."
+        ),
+        "module": "Knowledge",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query":    {"type": "string", "description": "Search query, e.g. 'how to create purchase order' or 'invoice blocked MIRO'"},
+                "category": {
+                    "type": "string",
+                    "description": "Optional filter: tcode, bapi, process, error, or configuration",
+                    "enum": ["tcode", "bapi", "process", "error", "configuration"]
+                },
+                "max_results": {"type": "integer", "description": "Max results to return (default 3)"}
+            },
+            "required": ["query"]
+        }
+    },
 ]
 
 # ─────────────────────────────────────────
@@ -452,6 +478,8 @@ FUNCTION_MAP = {
     "get_transport_request": abap.get_transport_request,
     "list_abap_programs": abap.list_abap_programs,
     "analyze_abap_syntax": abap.analyze_abap_syntax,
+    # Knowledge Base
+    "search_sap_docs": search_sap_docs,
 }
 
 

@@ -67,9 +67,37 @@ class ChatResponse(BaseModel):
     response: str
     tool_called: str | None = None
     tool_result: dict | None = None
+    action_plan: dict | None = None
     sap_source: dict | None = None
     request_id: str | None = None
     status: str = "ok"
+
+class ResearchRequest(BaseModel):
+    query: str
+
+class ResearchResponse(BaseModel):
+    report: str
+    anomalies: list[dict] = []
+    tools_used: list[str] = []
+    sap_sources: list[str] = []
+    entity_type: str | None = None
+    entity_id: str | None = None
+    duration_ms: int = 0
+    request_id: str | None = None
+    success: bool = True
+
+class AutonomousRequest(BaseModel):
+    query: str
+
+class AutonomousResponse(BaseModel):
+    report: str
+    reasoning: str = ""
+    tool_calls: list[dict] = []
+    tools_used: list[str] = []
+    iterations: int = 0
+    duration_ms: int = 0
+    request_id: str | None = None
+    success: bool = True
 
 class ConfigPatch(BaseModel):
     sap: dict[str, Any] | None = None
@@ -207,6 +235,7 @@ def chat(request: ChatRequest, http_request: Request, current_user: dict = Depen
     t_start = time.monotonic()
     tool_called   = None
     tool_result   = None
+    action_plan   = None
     sap_source    = None
     response_text = ""
     err_status    = "ok"
@@ -217,8 +246,13 @@ def chat(request: ChatRequest, http_request: Request, current_user: dict = Depen
             allowed_tools=get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
         )
 
+        # Separate action plans and autonomous results from regular tool results
+        if tool_called in ("action_plan", "autonomous_agent", "auto_research") and isinstance(tool_result, dict):
+            action_plan = tool_result if tool_called == "action_plan" else None
+            tool_result = None
+
         # RBAC: if agent called a tool the user isn't allowed, block it
-        if tool_called and _AUTH_ENABLED and not check_tool_access(tool_called, user_roles):
+        if tool_called and tool_called not in ("action_plan", "autonomous_agent", "auto_research") and _AUTH_ENABLED and not check_tool_access(tool_called, user_roles):
             raise HTTPException(
                 status_code=403,
                 detail=f"Access denied: your role does not permit '{tool_called}'. "
@@ -254,6 +288,7 @@ def chat(request: ChatRequest, http_request: Request, current_user: dict = Depen
         response=response_text,
         tool_called=tool_called,
         tool_result=tool_result,
+        action_plan=action_plan,
         sap_source=sap_source,
         request_id=rid,
         status="ok",
@@ -279,6 +314,114 @@ def my_logs(limit: int = 20, current_user: dict = Depends(get_current_user)):
 def reset(current_user: dict = Depends(get_current_user)):
     agent.reset_conversation()
     return {"status": "ok", "message": "Conversation history cleared"}
+
+
+# ── Auto Research endpoint ──────────────────────────────────────────────────────
+
+@app.post("/research", response_model=ResearchResponse)
+def research(request: ResearchRequest, http_request: Request, current_user: dict = Depends(get_current_user)):
+    """
+    Auto Research endpoint: autonomously chains multiple SAP tool calls for
+    an entity and returns a structured markdown report with anomaly detection.
+    """
+    user_id    = current_user["user_id"]
+    user_roles = current_user.get("roles", [])
+    client_ip  = http_request.client.host if http_request.client else "unknown"
+
+    t_start = time.monotonic()
+    err_status = "ok"
+    result = {}
+    rid = None
+
+    try:
+        _, _, result = agent.auto_research(
+            request.query,
+            allowed_tools=get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
+        )
+    except Exception as e:
+        err_status = "error"
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+        rid = log_request(
+            user_id=user_id,
+            user_roles=user_roles,
+            client_ip=client_ip,
+            endpoint="/research",
+            query=request.query,
+            tool_called="auto_research",
+            tool_parameters={"entity_type": result.get("entity_type"), "entity_id": result.get("entity_id"), "tools_run": result.get("tools_run", [])},
+            sap_source=None,
+            response_text=result.get("formatted_report", "")[:200],
+            duration_ms=duration_ms,
+            status=err_status,
+        )
+
+    return ResearchResponse(
+        report=result.get("formatted_report", ""),
+        anomalies=result.get("anomalies", []),
+        tools_used=result.get("tools_run", []),
+        sap_sources=result.get("sources_used", []),
+        entity_type=result.get("entity_type"),
+        entity_id=result.get("entity_id"),
+        duration_ms=duration_ms,
+        request_id=rid,
+        success=result.get("success", False),
+    )
+
+
+# ── Autonomous Agent endpoint ──────────────────────────────────────────────────
+
+@app.post("/autonomous", response_model=AutonomousResponse)
+def autonomous(request: AutonomousRequest, http_request: Request, current_user: dict = Depends(get_current_user)):
+    """
+    Autonomous Agent endpoint: LLM-driven iterative tool planning and execution
+    with business decision reasoning. Use for complex queries that require
+    multi-step investigation and strategic recommendations.
+    """
+    user_id    = current_user["user_id"]
+    user_roles = current_user.get("roles", [])
+    client_ip  = http_request.client.host if http_request.client else "unknown"
+
+    t_start = time.monotonic()
+    err_status = "ok"
+    result: dict = {}
+    rid = None
+
+    try:
+        _, _, result = agent.autonomous(
+            request.query,
+            allowed_tools=get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
+        )
+    except Exception as e:
+        err_status = "error"
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        duration_ms = int((time.monotonic() - t_start) * 1000)
+        rid = log_request(
+            user_id=user_id,
+            user_roles=user_roles,
+            client_ip=client_ip,
+            endpoint="/autonomous",
+            query=request.query,
+            tool_called="autonomous_agent",
+            tool_parameters={"iterations": result.get("iterations", 0), "tools_used": result.get("tools_used", [])},
+            sap_source=None,
+            response_text=result.get("report", "")[:200],
+            duration_ms=duration_ms,
+            status=err_status,
+        )
+
+    return AutonomousResponse(
+        report=result.get("report", ""),
+        reasoning=result.get("reasoning", ""),
+        tool_calls=result.get("tool_calls", []),
+        tools_used=result.get("tools_used", []),
+        iterations=result.get("iterations", 0),
+        duration_ms=duration_ms,
+        request_id=rid,
+        success=result.get("success", False),
+    )
 
 
 # ── Tools & modules ────────────────────────────────────────────────────────────
