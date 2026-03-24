@@ -9,7 +9,19 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        // Required for SSE streaming: disable response buffering
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              res.setHeader('Content-Type', 'text/event-stream')
+              res.setHeader('Cache-Control', 'no-cache')
+              res.setHeader('X-Accel-Buffering', 'no')
+              res.setHeader('Connection', 'keep-alive')
+              res.flushHeaders()
+            }
+          })
+        },
       }
     }
   }

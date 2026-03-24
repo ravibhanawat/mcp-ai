@@ -50,6 +50,7 @@ SAP_SOURCES: dict[str, dict] = {
     "get_transport_request":    {"bapi": "N/A",  "tcode": "SE10",  "table": "E070",   "verify": "T-code SE10 → Transport Organizer"},
     "list_abap_programs":       {"bapi": "N/A",  "tcode": "SE80",  "table": "TRDIR",  "verify": "T-code SE80 → Object Navigator"},
     "analyze_abap_syntax":      {"bapi": "N/A",  "tcode": "SE38",  "table": "N/A",    "verify": "T-code SE38 → ABAP Editor (Syntax Check)"},
+    "generate_abap_code":       {"bapi": "N/A",  "tcode": "SE38",  "table": "N/A",    "verify": "T-code SE38 → ABAP Editor"},
     # Knowledge Base
     "search_sap_docs":          {"bapi": "N/A",  "tcode": "N/A",   "table": "N/A",    "verify": "SAP Knowledge Base (built-in)"},
 }
@@ -478,6 +479,7 @@ FUNCTION_MAP = {
     "get_transport_request": abap.get_transport_request,
     "list_abap_programs": abap.list_abap_programs,
     "analyze_abap_syntax": abap.analyze_abap_syntax,
+    "generate_abap_code": abap.generate_abap_code,
     # Knowledge Base
     "search_sap_docs": search_sap_docs,
 }

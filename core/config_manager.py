@@ -5,14 +5,15 @@ Handles SAP connection, MCP servers, and Ollama settings.
 """
 import json
 import os
+import stat
 import copy
 from typing import Any
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "sap": {
-        "connection_type": "mock",          # mock | cloud | on_premise
+        "connection_type": "db",            # db | cloud | on_premise
         "system_url": "",                   # e.g. https://myXXXXXX.s4hana.ondemand.com
         "client": "100",                    # SAP client number
         "auth_type": "basic",               # basic | oauth2 | x509
@@ -28,7 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "mcp": {
         "builtin_enabled": True,            # expose the built-in stdio MCP server
         "transport": "stdio",               # stdio | sse
-        "sse_host": "0.0.0.0",
+        "sse_host": "127.0.0.1",
         "sse_port": 8001,
         "custom_servers": [],               # list of {name, url, transport, enabled}
     },
@@ -39,7 +40,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 # Fields that must be masked when returned to the browser
-_SENSITIVE = {"password", "oauth_client_secret", "x509_cert_path"}
+_SENSITIVE = {"password", "oauth_client_secret", "oauth_token_url", "x509_cert_path"}
 
 
 class ConfigManager:
@@ -63,6 +64,8 @@ class ConfigManager:
     def _save(self):
         with open(self._path, "w") as f:
             json.dump(self._config, f, indent=2)
+        # Restrict to owner read/write only — config may contain SAP credentials
+        os.chmod(self._path, stat.S_IRUSR | stat.S_IWUSR)
 
     @staticmethod
     def _merge(base: dict, override: dict) -> dict:
@@ -134,11 +137,11 @@ class ConfigManager:
         cfg = self._config["sap"]
         conn_type = cfg["connection_type"]
 
-        if conn_type == "mock":
+        if conn_type in ("mock", "db"):
             return {
                 "success": True,
-                "message": "Mock mode — no real SAP connection needed. All data is simulated.",
-                "connection_type": "mock",
+                "message": "Database mode — data is served from PostgreSQL. No direct SAP BAPI connection.",
+                "connection_type": conn_type,
             }
 
         url = cfg.get("system_url", "").strip()

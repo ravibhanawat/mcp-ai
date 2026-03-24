@@ -4,10 +4,10 @@ Connects to the MCP server (mcp_server.py) and lets you call any SAP tool
 interactively or programmatically.
 
 Usage (interactive CLI):
-    python mcp_client.py
+    python protocol/client.py
 
 Usage (programmatic):
-    from mcp_client import SAPMCPClient
+    from protocol.client import SAPMCPClient
     import asyncio
 
     async def main():
@@ -26,7 +26,7 @@ import os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-SERVER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
+SERVER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.py")
 
 
 class SAPMCPClient:

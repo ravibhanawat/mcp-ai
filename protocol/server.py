@@ -5,14 +5,22 @@ Model Context Protocol so any MCP-compatible client or LLM host
 (Claude Desktop, Cursor, etc.) can call them directly.
 
 Run:
-    python mcp_server.py
+    python protocol/server.py
 """
 import sys
 import os
 import json
 import asyncio
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env from project root so DB_USER, DB_PASSWORD etc. are available
+# when launched as a subprocess (e.g. Claude Desktop MCP stdio)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+except ImportError:
+    pass
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server

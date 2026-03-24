@@ -75,7 +75,7 @@ class AutonomousAgent:
 
     def __init__(self, model: str = "llama3.2", ollama_url: str = None):
         try:
-            from config_manager import config as _cfg
+            from core.config_manager import config as _cfg
             self.model = model or _cfg.default_model
             self.ollama_url = ollama_url or _cfg.ollama_url
         except Exception:
