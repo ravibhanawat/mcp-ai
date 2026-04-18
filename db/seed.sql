@@ -594,3 +594,70 @@ INSERT INTO transport_requests (tr_id, description, tr_type, status, owner, crea
 ('DEVK900133', 'Customer Master BDC Upload — GST Validation Bugfix',      'Workbench',    'MODIFIABLE', 'BASIS_ADM', '2025-01-20', NULL,         'QUALITY',     'ZBDC_CUSTOMER_UPLOAD'),
 ('DEVK900134', 'Material Ledger Valuation — Period-End Closing Report',   'Workbench',    'RELEASED',   'ABAP_DEV',  '2024-11-15', '2024-12-20', 'PRODUCTION',  'ZREP_MATERIAL_VALUATION')
 ON CONFLICT (tr_id) DO UPDATE SET status = EXCLUDED.status;
+
+-- ============================================================
+-- Alembic Real Estate — "Parivartan" Project Seed Data
+-- Projects: Cloud Forest, Park Crescent
+-- ============================================================
+
+-- ── RE Customers ─────────────────────────────────────────────────────────────────
+INSERT INTO re_customers (customer_id, name, pan_number, aadhaar, dob, phone, email, address, city, state, project, unit_number, tower, floor, area_sqft, area_sqm, sale_value, gst_number, co_applicant, booking_date) VALUES
+('ALEC001', 'Rahul Sharma',          'ABCPS1234D', '9876-5432-1098', '1985-06-15', '9876543210', 'rahul.sharma@email.com',    '12 Anand Nagar, Sector 7',  'Ahmedabad', 'Gujarat', 'CLOUD_FOREST',  'T1-304', 'T1', '3', 1250.00, 116.13, 6500000.00, NULL,               'Priya Sharma',   '2024-04-10'),
+('ALEC002', 'Priya Nair',            'XYZPN9876A', '8765-4321-0987', '1990-02-20', '9123456789', 'priya.nair@email.com',      '45 Marine Lines, Colaba',   'Mumbai',    'Maharashtra', 'CLOUD_FOREST', 'T2-201', 'T2', '2', 980.00,  91.04,  4800000.00, NULL,               'Anil Nair',      '2024-05-18'),
+('ALEC003', 'Vikram Patel',          'DEFVP4567H', '7654-3210-9876', '1978-11-03', '9988776655', 'vikram.patel@email.com',    '78 Satellite Road',         'Ahmedabad', 'Gujarat', 'PARK_CRESCENT', 'PC-1102','PC', '11',1100.00, 102.19, 5500000.00, NULL,               NULL,             '2024-06-25'),
+('ALEC004', 'Sunita Mehta Corp',     'GHIJK5678B', '6543-2109-8765', '1975-08-12', '9900112233', 'sunita@mehtacorp.in',       '34 GIDC Industrial Estate', 'Surat',     'Gujarat', 'CLOUD_FOREST',  'T1-506', 'T1', '5', 1400.00, 130.06, 7200000.00, '24GHIJK5678B1ZQ', NULL,             '2024-07-01'),
+('ALEC005', 'Rajesh Kumar',          'LMNOP2345C', '5432-1098-7654', '1982-03-28', '9871234560', 'rajesh.kumar@email.com',    '89 Navrangpura',             'Ahmedabad', 'Gujarat', 'PARK_CRESCENT', 'PC-0802','PC', '8', 890.00,  82.68,  4200000.00, NULL,               'Anita Kumar',    '2024-08-15')
+ON CONFLICT (customer_id) DO UPDATE SET name = EXCLUDED.name;
+
+-- ── RE Milestones — ALEC001 / T1-304 ────────────────────────────────────────────
+INSERT INTO re_milestones (customer_id, unit_number, milestone_code, description, billing_doc_no, basic_amt, cgst_amt, sgst_amt, tds_amt, basic_collected, cgst_collected, sgst_collected, tds_collected, status, billing_date) VALUES
+-- M01 Booking — Fully Collected
+('ALEC001','T1-304','M01','Booking Amount',        '9000010001', 200000.00,  18000.00,  18000.00, 0.00,  200000.00, 18000.00, 18000.00, 0.00, 'COLLECTED', '2024-04-10'),
+-- M02 Foundation — Fully Collected
+('ALEC001','T1-304','M02','Foundation Completion',  '9000010002', 500000.00,  45000.00,  45000.00, 0.00,  500000.00, 45000.00, 45000.00, 0.00, 'COLLECTED', '2024-07-15'),
+-- M03 Plinth — Partially Collected (₹350,000 basic outstanding)
+('ALEC001','T1-304','M03','Plinth Level',           '9000010003', 700000.00,  63000.00,  63000.00, 0.00,  350000.00, 20000.00,  20000.00, 0.00, 'PARTIAL',   '2024-10-20'),
+-- M04 Slab Level 3 — Pending
+('ALEC001','T1-304','M04','Slab Level 3',           '9000010004', 800000.00,  72000.00,  72000.00, 0.00,       0.00,     0.00,      0.00, 0.00, 'PENDING',   '2025-01-15'),
+-- M05 Possession — Pending
+('ALEC001','T1-304','M05','Possession',             '9000010005',1200000.00, 108000.00, 108000.00, 0.00,       0.00,     0.00,      0.00, 0.00, 'PENDING',   NULL)
+ON CONFLICT (customer_id, unit_number, milestone_code) DO UPDATE SET status = EXCLUDED.status, basic_collected = EXCLUDED.basic_collected;
+
+-- ── RE Milestones — ALEC002 / T2-201 ────────────────────────────────────────────
+INSERT INTO re_milestones (customer_id, unit_number, milestone_code, description, billing_doc_no, basic_amt, cgst_amt, sgst_amt, tds_amt, basic_collected, cgst_collected, sgst_collected, tds_collected, status, billing_date) VALUES
+('ALEC002','T2-201','M01','Booking Amount',        '9000020001', 144000.00, 12960.00, 12960.00, 0.00, 144000.00, 12960.00, 12960.00, 0.00, 'COLLECTED', '2024-05-18'),
+('ALEC002','T2-201','M02','Foundation Completion', '9000020002', 384000.00, 34560.00, 34560.00, 0.00,  57600.00,  5184.00,  5184.00, 0.00, 'PARTIAL',   '2024-09-10'),
+('ALEC002','T2-201','M03','Plinth Level',          NULL,         480000.00, 43200.00, 43200.00, 0.00,      0.00,     0.00,     0.00, 0.00, 'PENDING',   NULL),
+('ALEC002','T2-201','M04','Possession',            NULL,         672000.00, 60480.00, 60480.00, 0.00,      0.00,     0.00,     0.00, 0.00, 'PENDING',   NULL)
+ON CONFLICT (customer_id, unit_number, milestone_code) DO UPDATE SET status = EXCLUDED.status;
+
+-- ── RE Milestones — ALEC003 / PC-1102 ───────────────────────────────────────────
+INSERT INTO re_milestones (customer_id, unit_number, milestone_code, description, billing_doc_no, basic_amt, cgst_amt, sgst_amt, tds_amt, basic_collected, cgst_collected, sgst_collected, tds_collected, status, billing_date) VALUES
+('ALEC003','PC-1102','M01','Booking Amount',       '9000030001', 165000.00, 14850.00, 14850.00, 0.00, 165000.00, 14850.00, 14850.00, 0.00, 'COLLECTED', '2024-06-25'),
+('ALEC003','PC-1102','M02','Foundation',           '9000030002', 550000.00, 49500.00, 49500.00, 0.00, 550000.00, 49500.00, 49500.00, 0.00, 'COLLECTED', '2024-09-30'),
+('ALEC003','PC-1102','M03','Plinth Level',         '9000030003', 550000.00, 49500.00, 49500.00, 0.00,      0.00,     0.00,     0.00, 0.00, 'PENDING',   '2025-02-01'),
+('ALEC003','PC-1102','M04','Possession',           NULL,         935000.00, 84150.00, 84150.00, 0.00,      0.00,     0.00,     0.00, 0.00, 'PENDING',   NULL)
+ON CONFLICT (customer_id, unit_number, milestone_code) DO UPDATE SET status = EXCLUDED.status;
+
+-- ── Customer Receipts — Demo pre-parked entry ────────────────────────────────────
+INSERT INTO customer_receipts (park_ref, customer_id, unit_number, payment_mode, amount, instrument_ref, instrument_date, bank_name, excess_basic, excess_tds, status) VALUES
+('PRK00000001', 'ALEC001', 'T1-304', 'Cheque', 500000.00, 'CH890123', '2026-03-15', 'HDFC Bank', 0.00, 0.00, 'PARKED')
+ON CONFLICT (park_ref) DO NOTHING;
+
+INSERT INTO receipt_allocations (park_ref, milestone_code, billing_doc_no, basic_applied, cgst_applied, sgst_applied, tds_applied) VALUES
+('PRK00000001', 'M03', '9000010003', 350000.00, 43000.00, 43000.00, 0.00),
+('PRK00000001', 'M04', '9000010004',  64000.00,     0.00,     0.00, 0.00)
+ON CONFLICT DO NOTHING;
+
+-- ── RE Brokers ───────────────────────────────────────────────────────────────────
+INSERT INTO re_brokers (broker_id, name, pan, gstin, phone, payout_pct, bank_account, bank_name, status) VALUES
+('BR001', 'Aakash Properties',    'BRKAP1234E', '24BRKAP1234E1ZK', '9898989898', 1.50, '50100012345678', 'HDFC Bank',  'ACTIVE'),
+('BR002', 'Sunrise Realty',       'BRKSR5678F', NULL,               '9797979797', 1.25, '60200098765432', 'ICICI Bank', 'ACTIVE')
+ON CONFLICT (broker_id) DO UPDATE SET name = EXCLUDED.name;
+
+-- ── RE Broker Bookings ───────────────────────────────────────────────────────────
+INSERT INTO re_broker_bookings (broker_id, customer_id, unit_number, sale_value, payout_amount, collected_pct, po_number, po_status, miro_status, tagged_date) VALUES
+('BR001', 'ALEC001', 'T1-304', 6500000.00, 97500.00,  72.31, NULL, 'NOT_CREATED', 'PENDING', '2024-04-10'),
+('BR001', 'ALEC002', 'T2-201', 4800000.00, 72000.00,  15.00, NULL, 'NOT_CREATED', 'PENDING', '2024-05-18'),
+('BR002', 'ALEC003', 'PC-1102',5500000.00, 68750.00,  63.64, NULL, 'NOT_CREATED', 'PENDING', '2024-06-25')
+ON CONFLICT DO NOTHING;

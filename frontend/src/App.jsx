@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import ReportWidget from './ReportWidget'
 import { AbapReviewWidget, AbapCodeWidget } from './AbapWidget'
+import ReceiptWidget from './ReceiptWidget'
 
 const API = '/api'
 
@@ -48,39 +49,64 @@ async function apiFetch(path, options = {}) {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const MODULES = [
-  { id: 'all',   name: 'All Modules', iconId: 'grid',   desc: 'All SAP tools',          moduleKey: null,    color: '#0070D2',
-    examples: ['Show me open purchase orders', 'List all employees', 'What is the budget for CC100?', 'Get customer info for C001'] },
-  { id: 'FI/CO', name: 'FI/CO',       iconId: 'dollar', desc: 'Finance & Controlling',  moduleKey: 'fi_co', color: '#16A34A',
-    examples: ['Get vendor info for V001', 'Show invoice INV1001 status', 'List all open invoices', 'Budget vs actual for CC200'] },
-  { id: 'MM',    name: 'MM',          iconId: 'package',desc: 'Materials Management',   moduleKey: 'mm',    color: '#D97706',
-    examples: ['Get material info for MAT001', 'Check stock for MAT002 at plant 1000', 'Show PO2001', 'Which materials need reordering?'] },
-  { id: 'SD',    name: 'SD',          iconId: 'cart',   desc: 'Sales & Distribution',   moduleKey: 'sd',    color: '#7C3AED',
-    examples: ['Get customer info for C002', 'Show sales order SO5001', 'Create a sales order for Wipro — 10 laptops'] },
-  { id: 'HR',    name: 'HR',          iconId: 'users',  desc: 'Human Resources',        moduleKey: 'hr',    color: '#DB2777',
-    examples: ['Get employee info for EMP001', 'Leave balance for EMP002', 'Show payslip for EMP001', 'Apply 3 days leave for EMP003'] },
-  { id: 'PP',    name: 'PP',          iconId: 'factory',desc: 'Production Planning',    moduleKey: 'pp',    color: '#0891B2',
-    examples: ['Get production order PRD7001', 'Bill of materials for MAT001', 'Capacity utilization report'] },
-  { id: 'ABAP',  name: 'ABAP',        iconId: 'code',   desc: 'Development & Basis',   moduleKey: 'abap',  color: '#64748B',
-    examples: ['Show program ZREP_VENDOR_LIST', 'Transport DEVK900123 status', 'List ABAP programs in package ZFICO'] },
+  {
+    id: 'all', name: 'All Modules', iconId: 'grid', desc: 'All SAP tools', moduleKey: null, color: '#0070D2',
+    examples: ['Show me open purchase orders', 'List all employees', 'What is the budget for CC100?', 'Get customer info for C001']
+  },
+  {
+    id: 'FI/CO', name: 'FI/CO', iconId: 'dollar', desc: 'Finance & Controlling', moduleKey: 'fi_co', color: '#16A34A',
+    examples: ['Get vendor info for V001', 'Show invoice INV1001 status', 'List all open invoices', 'Budget vs actual for CC200']
+  },
+  {
+    id: 'MM', name: 'MM', iconId: 'package', desc: 'Materials Management', moduleKey: 'mm', color: '#D97706',
+    examples: ['Get material info for MAT001', 'Check stock for MAT002 at plant 1000', 'Show PO2001', 'Which materials need reordering?']
+  },
+  {
+    id: 'SD', name: 'SD', iconId: 'cart', desc: 'Sales & Distribution', moduleKey: 'sd', color: '#7C3AED',
+    examples: ['Get customer info for C002', 'Show sales order SO5001', 'Create a sales order for Wipro — 10 laptops']
+  },
+  {
+    id: 'HR', name: 'HR', iconId: 'users', desc: 'Human Resources', moduleKey: 'hr', color: '#DB2777',
+    examples: ['Get employee info for EMP001', 'Leave balance for EMP002', 'Show payslip for EMP001', 'Apply 3 days leave for EMP003']
+  },
+  {
+    id: 'PP', name: 'PP', iconId: 'factory', desc: 'Production Planning', moduleKey: 'pp', color: '#0891B2',
+    examples: ['Get production order PRD7001', 'Bill of materials for MAT001', 'Capacity utilization report']
+  },
+  {
+    id: 'ABAP', name: 'ABAP', iconId: 'code', desc: 'Development & Basis', moduleKey: 'abap', color: '#64748B',
+    examples: ['Show program ZREP_VENDOR_LIST', 'Transport DEVK900123 status', 'List ABAP programs in package ZFICO']
+  },
+  {
+    id: 'RE', name: 'Real Estate', iconId: 'building', desc: 'Parivartan — Receipt & Docs', moduleKey: 're_analyst', color: '#B45309',
+    examples: [
+      'Show outstanding for customer ALEC001 unit T1-304',
+      'Park a cheque of 5 lakhs for ALEC001 T1-304, cheque 891234',
+      'Post receipt PRK00000001',
+      'Check e-invoice for billing doc 9000010001',
+      'Show broker payout status for BR001',
+      'Get sales deed data for ALEC001 unit T1-304',
+    ]
+  },
 ]
 
 const MODELS = ['llama3.2', 'llama3.1', 'mistral', 'gemma2', 'codellama']
 const AUTH_TYPES = [
-  { value: 'basic',  label: 'Basic Auth' },
+  { value: 'basic', label: 'Basic Auth' },
   { value: 'oauth2', label: 'OAuth 2.0' },
-  { value: 'x509',   label: 'X.509 Certificate' },
+  { value: 'x509', label: 'X.509 Certificate' },
 ]
 const ROLE_LABELS = {
   admin: 'Administrator', fi_co_analyst: 'FI/CO Analyst', mm_analyst: 'MM Analyst',
   sd_analyst: 'SD Analyst', hr_manager: 'HR Manager', pp_planner: 'PP Planner',
-  abap_developer: 'ABAP Developer', read_only: 'Read Only',
+  abap_developer: 'ABAP Developer', re_analyst: 'RE Analyst', read_only: 'Read Only',
 }
 const ROLE_COLORS = {
   admin: '#0070D2', fi_co_analyst: '#16A34A', mm_analyst: '#D97706',
   sd_analyst: '#7C3AED', hr_manager: '#DB2777', pp_planner: '#0891B2',
-  abap_developer: '#64748B', read_only: '#94A3B8',
+  abap_developer: '#64748B', re_analyst: '#B45309', read_only: '#94A3B8',
 }
-const ALL_ROLES = ['admin','fi_co_analyst','mm_analyst','sd_analyst','hr_manager','pp_planner','abap_developer','read_only']
+const ALL_ROLES = ['admin', 'fi_co_analyst', 'mm_analyst', 'sd_analyst', 'hr_manager', 'pp_planner', 'abap_developer', 're_analyst', 'read_only']
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 // Zero-dependency icon library — pure inline SVG paths (Lucide-style strokes)
@@ -96,29 +122,30 @@ function Svg({ size = 16, children, className = '', style }) {
 }
 
 const Icons = {
-  grid:    () => <Svg><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></Svg>,
-  dollar:  () => <Svg><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></Svg>,
-  package: () => <Svg><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></Svg>,
-  cart:    () => <Svg><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></Svg>,
-  users:   () => <Svg><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Svg>,
-  factory: () => <Svg><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></Svg>,
-  code:    () => <Svg><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></Svg>,
-  settings:() => <Svg><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></Svg>,
-  logout:  () => <Svg><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></Svg>,
-  x:       () => <Svg size={14}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Svg>,
-  send:    () => <Svg size={15}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></Svg>,
-  trash:   () => <Svg size={14}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></Svg>,
-  copy:    () => <Svg size={13}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></Svg>,
-  beaker:  () => <Svg><path d="M4.5 3h15"/><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3"/><path d="M6 14h12"/></Svg>,
-  chevDown:() => <Svg size={14}><polyline points="6 9 12 15 18 9"/></Svg>,
-  chevUp:  () => <Svg size={14}><polyline points="18 15 12 9 6 15"/></Svg>,
-  alert:   () => <Svg size={14}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Svg>,
-  check:   () => <Svg size={14}><polyline points="20 6 9 17 4 12"/></Svg>,
-  terminal:() => <Svg size={14}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></Svg>,
-  refresh: () => <Svg size={14}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></Svg>,
-  wifi:    () => <Svg size={14}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></Svg>,
-  wifiOff: () => <Svg size={14}><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></Svg>,
-  panel:   () => <Svg size={16}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></Svg>,
+  grid: () => <Svg><rect width="7" height="7" x="3" y="3" rx="1" /><rect width="7" height="7" x="14" y="3" rx="1" /><rect width="7" height="7" x="14" y="14" rx="1" /><rect width="7" height="7" x="3" y="14" rx="1" /></Svg>,
+  dollar: () => <Svg><line x1="12" y1="2" x2="12" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></Svg>,
+  package: () => <Svg><path d="m7.5 4.27 9 5.15" /><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></Svg>,
+  cart: () => <Svg><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></Svg>,
+  users: () => <Svg><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></Svg>,
+  factory: () => <Svg><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /><path d="M17 18h1" /><path d="M12 18h1" /><path d="M7 18h1" /></Svg>,
+  code: () => <Svg><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></Svg>,
+  settings: () => <Svg><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></Svg>,
+  logout: () => <Svg><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></Svg>,
+  x: () => <Svg size={14}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Svg>,
+  send: () => <Svg size={15}><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>,
+  trash: () => <Svg size={14}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Svg>,
+  copy: () => <Svg size={13}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></Svg>,
+  beaker: () => <Svg><path d="M4.5 3h15" /><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3" /><path d="M6 14h12" /></Svg>,
+  chevDown: () => <Svg size={14}><polyline points="6 9 12 15 18 9" /></Svg>,
+  chevUp: () => <Svg size={14}><polyline points="18 15 12 9 6 15" /></Svg>,
+  alert: () => <Svg size={14}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></Svg>,
+  check: () => <Svg size={14}><polyline points="20 6 9 17 4 12" /></Svg>,
+  terminal: () => <Svg size={14}><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></Svg>,
+  refresh: () => <Svg size={14}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></Svg>,
+  wifi: () => <Svg size={14}><path d="M5 12.55a11 11 0 0 1 14.08 0" /><path d="M1.42 9a16 16 0 0 1 21.16 0" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Svg>,
+  wifiOff: () => <Svg size={14}><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></Svg>,
+  panel: () => <Svg size={16}><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" /></Svg>,
+  building: () => <Svg><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></Svg>,
 }
 
 function ModuleIcon({ iconId, color, size = 14 }) {
@@ -131,7 +158,7 @@ function ModuleIcon({ iconId, color, size = 14 }) {
 
 const KW = {
   abap: new Set('DATA,TYPES,CLASS,METHOD,ENDMETHOD,IF,ELSE,ELSEIF,ENDIF,LOOP,AT,ENDAT,ENDLOOP,SELECT,FROM,INTO,WHERE,AND,OR,NOT,IS,MOVE,CLEAR,APPEND,READ,WRITE,FORM,ENDFORM,PERFORM,CALL,FUNCTION,TABLE,OF,TYPE,LIKE,IMPORTING,EXPORTING,CHANGING,EXCEPTIONS,BEGIN,END,REPORT,TABLES,PARAMETERS,CHECK,RETURN,RAISE,EXIT,CONTINUE,SORT,MODIFY,DELETE,INSERT,UPDATE,COMMIT,WHEN,CASE,ENDCASE,CREATE,OBJECT,FINAL,REFERENCE,USING,RESULT,LET,WHILE,ENDWHILE,DO,ENDDO,TRY,CATCH,ENDTRY,CONCATENATE,SPLIT,CONDENSE,FIND,REPLACE,TRANSLATE,GET,SET,COLLECT,NEW,FIELD-SYMBOLS,ASSIGN,COMPONENT,STRUCTURE,IMPLEMENTATION,DEFINITION,SECTION,PUBLIC,PRIVATE,PROTECTED,METHODS,ATTRIBUTES,CONSTANTS,VALUE,INITIAL'.split(',')),
-  sql:  new Set('SELECT,FROM,WHERE,AND,OR,NOT,IN,LIKE,BETWEEN,IS,NULL,INSERT,INTO,VALUES,UPDATE,SET,DELETE,CREATE,TABLE,ALTER,DROP,INDEX,JOIN,INNER,LEFT,RIGHT,OUTER,FULL,ON,GROUP,BY,HAVING,ORDER,ASC,DESC,LIMIT,OFFSET,DISTINCT,AS,UNION,ALL,EXISTS,COUNT,SUM,AVG,MIN,MAX,CASE,WHEN,THEN,ELSE,END,WITH,TOP,PRIMARY,KEY,FOREIGN,REFERENCES,CONSTRAINT,DEFAULT,UNIQUE'.split(',')),
+  sql: new Set('SELECT,FROM,WHERE,AND,OR,NOT,IN,LIKE,BETWEEN,IS,NULL,INSERT,INTO,VALUES,UPDATE,SET,DELETE,CREATE,TABLE,ALTER,DROP,INDEX,JOIN,INNER,LEFT,RIGHT,OUTER,FULL,ON,GROUP,BY,HAVING,ORDER,ASC,DESC,LIMIT,OFFSET,DISTINCT,AS,UNION,ALL,EXISTS,COUNT,SUM,AVG,MIN,MAX,CASE,WHEN,THEN,ELSE,END,WITH,TOP,PRIMARY,KEY,FOREIGN,REFERENCES,CONSTRAINT,DEFAULT,UNIQUE'.split(',')),
   javascript: new Set('const,let,var,function,return,if,else,for,while,do,switch,case,break,continue,class,extends,import,export,default,from,async,await,new,this,super,try,catch,finally,throw,typeof,instanceof,null,undefined,true,false,of,in,delete,void,yield,static,get,set,constructor,NaN,Infinity'.split(',')),
   python: new Set('def,class,return,if,elif,else,for,while,import,from,as,in,not,and,or,is,None,True,False,try,except,finally,raise,with,pass,break,continue,lambda,yield,global,nonlocal,del,assert,self,super,print,len,range,type'.split(',')),
 }
@@ -150,13 +177,13 @@ function tokenizeJSON(code) {
       out.push(code[nk] === ':' ? s('json-key', str) : s('string', str))
       i = j; continue
     }
-    if (/[-0-9]/.test(ch) && (ch !== '-' || /[0-9]/.test(code[i+1]))) {
+    if (/[-0-9]/.test(ch) && (ch !== '-' || /[0-9]/.test(code[i + 1]))) {
       let j = i + 1; while (j < code.length && /[0-9.eE+\-]/.test(code[j])) j++
       out.push(s('number', code.slice(i, j))); i = j; continue
     }
-    if (code.startsWith('true', i))  { out.push(s('boolean', 'true'));  i += 4; continue }
+    if (code.startsWith('true', i)) { out.push(s('boolean', 'true')); i += 4; continue }
     if (code.startsWith('false', i)) { out.push(s('boolean', 'false')); i += 5; continue }
-    if (code.startsWith('null', i))  { out.push(s('null', 'null'));     i += 4; continue }
+    if (code.startsWith('null', i)) { out.push(s('null', 'null')); i += 4; continue }
     if (/[{}\[\]:,]/.test(ch)) { out.push(s('op', ch)); i++; continue }
     out.push(<span key={k++}>{ch}</span>); i++
   }
@@ -173,10 +200,10 @@ function tokenizeCode(code, lang) {
   while (i < code.length) {
     const ch = code[i]
     // Line comments
-    if ((l === 'abap' && ch === '*' && (i === 0 || code[i-1] === '\n')) ||
-        (l === 'python' && ch === '#') ||
-        (l === 'sql' && ch === '-' && code[i+1] === '-') ||
-        (l === 'javascript' && ch === '/' && code[i+1] === '/')) {
+    if ((l === 'abap' && ch === '*' && (i === 0 || code[i - 1] === '\n')) ||
+      (l === 'python' && ch === '#') ||
+      (l === 'sql' && ch === '-' && code[i + 1] === '-') ||
+      (l === 'javascript' && ch === '/' && code[i + 1] === '/')) {
       let j = code.indexOf('\n', i); if (j === -1) j = code.length
       out.push(s('comment', code.slice(i, j))); i = j; continue
     }
@@ -186,7 +213,7 @@ function tokenizeCode(code, lang) {
       out.push(s('comment', code.slice(i, j))); i = j; continue
     }
     // Block comment /* */
-    if (l === 'javascript' && ch === '/' && code[i+1] === '*') {
+    if (l === 'javascript' && ch === '/' && code[i + 1] === '*') {
       let j = code.indexOf('*/', i + 2); if (j === -1) j = code.length - 2
       out.push(s('comment', code.slice(i, j + 2))); i = j + 2; continue
     }
@@ -251,27 +278,27 @@ function parseInline(text, baseKey = 0) {
   const out = []; let i = 0; let k = baseKey
   while (i < text.length) {
     // Bold **
-    if (text[i] === '*' && text[i+1] === '*') {
+    if (text[i] === '*' && text[i + 1] === '*') {
       const end = text.indexOf('**', i + 2)
-      if (end !== -1) { out.push(<strong key={k++}>{text.slice(i+2, end)}</strong>); i = end + 2; continue }
+      if (end !== -1) { out.push(<strong key={k++}>{text.slice(i + 2, end)}</strong>); i = end + 2; continue }
     }
     // Italic *
     if (text[i] === '*') {
       const end = text.indexOf('*', i + 1)
-      if (end !== -1) { out.push(<em key={k++}>{text.slice(i+1, end)}</em>); i = end + 1; continue }
+      if (end !== -1) { out.push(<em key={k++}>{text.slice(i + 1, end)}</em>); i = end + 1; continue }
     }
     // Inline code `
     if (text[i] === '`') {
       const end = text.indexOf('`', i + 1)
-      if (end !== -1) { out.push(<code key={k++} className="inline-code">{text.slice(i+1, end)}</code>); i = end + 1; continue }
+      if (end !== -1) { out.push(<code key={k++} className="inline-code">{text.slice(i + 1, end)}</code>); i = end + 1; continue }
     }
     // Link [label](url)
     if (text[i] === '[') {
       const te = text.indexOf(']', i + 1)
-      if (te !== -1 && text[te+1] === '(') {
+      if (te !== -1 && text[te + 1] === '(') {
         const ue = text.indexOf(')', te + 2)
         if (ue !== -1) {
-          out.push(<a key={k++} href={text.slice(te+2, ue)} target="_blank" rel="noreferrer" className="md-link">{text.slice(i+1, te)}</a>)
+          out.push(<a key={k++} href={text.slice(te + 2, ue)} target="_blank" rel="noreferrer" className="md-link">{text.slice(i + 1, te)}</a>)
           i = ue + 1; continue
         }
       }
@@ -286,9 +313,9 @@ function parseInline(text, baseKey = 0) {
 
 function statusClass(val) {
   const s = String(val).toLowerCase()
-  if (['ok','open','active','paid','delivered','success','released'].includes(s)) return 'st-success'
-  if (['blocked','error','cancelled','failed','poor'].includes(s)) return 'st-error'
-  if (['pending','partial','in_progress','in_transit','modifiable','needs_review'].includes(s)) return 'st-warning'
+  if (['ok', 'open', 'active', 'paid', 'delivered', 'success', 'released'].includes(s)) return 'st-success'
+  if (['blocked', 'error', 'cancelled', 'failed', 'poor'].includes(s)) return 'st-error'
+  if (['pending', 'partial', 'in_progress', 'in_transit', 'modifiable', 'needs_review'].includes(s)) return 'st-warning'
   return ''
 }
 
@@ -304,8 +331,8 @@ function MarkdownRenderer({ content, className = '' }) {
     }
     // Headings
     if (line.startsWith('### ')) { blocks.push(<h3 key={bk++} className="md-h3">{parseInline(line.slice(4))}</h3>); i++; continue }
-    if (line.startsWith('## '))  { blocks.push(<h2 key={bk++} className="md-h2">{parseInline(line.slice(3))}</h2>); i++; continue }
-    if (line.startsWith('# '))   { blocks.push(<h1 key={bk++} className="md-h1">{parseInline(line.slice(2))}</h1>); i++; continue }
+    if (line.startsWith('## ')) { blocks.push(<h2 key={bk++} className="md-h2">{parseInline(line.slice(3))}</h2>); i++; continue }
+    if (line.startsWith('# ')) { blocks.push(<h1 key={bk++} className="md-h1">{parseInline(line.slice(2))}</h1>); i++; continue }
     // HR
     if (/^[-*_]{3,}$/.test(line.trim())) { blocks.push(<hr key={bk++} className="md-hr" />); i++; continue }
     // Blockquote
@@ -314,7 +341,7 @@ function MarkdownRenderer({ content, className = '' }) {
       blocks.push(<blockquote key={bk++} className="md-blockquote">{parseInline(ql.join(' '))}</blockquote>); continue
     }
     // GFM Table
-    if (line.includes('|') && i + 1 < lines.length && /^[\s|:-]+$/.test(lines[i+1])) {
+    if (line.includes('|') && i + 1 < lines.length && /^[\s|:-]+$/.test(lines[i + 1])) {
       const parseCells = (r) => r.split('|').filter((_, idx, a) => idx > 0 && idx < a.length - 1).map(c => c.trim())
       const headers = parseCells(line); i += 2; const rows = []
       while (i < lines.length && lines[i].includes('|')) { rows.push(parseCells(lines[i])); i++ }
@@ -376,9 +403,9 @@ function DataTable({ columns, rows, total, loading }) {
 
   const sorted = sortCol
     ? [...filtered].sort((a, b) => {
-        const av = a[sortCol] ?? '', bv = b[sortCol] ?? ''
-        return sortAsc ? String(av).localeCompare(String(bv), undefined, { numeric: true }) : String(bv).localeCompare(String(av), undefined, { numeric: true })
-      })
+      const av = a[sortCol] ?? '', bv = b[sortCol] ?? ''
+      return sortAsc ? String(av).localeCompare(String(bv), undefined, { numeric: true }) : String(bv).localeCompare(String(av), undefined, { numeric: true })
+    })
     : filtered
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
@@ -466,7 +493,7 @@ function SapSourceBadge({ source }) {
 
 function ToolResult({ result }) {
   if (!result || typeof result !== 'object') return null
-  const display = Object.fromEntries(Object.entries(result).filter(([k]) => !['sap_source','status'].includes(k)))
+  const display = Object.fromEntries(Object.entries(result).filter(([k]) => !['sap_source', 'status'].includes(k)))
   const isArr = Array.isArray(display)
   const isArrOfObj = isArr && display.length > 0 && typeof display[0] === 'object'
 
@@ -477,39 +504,39 @@ function ToolResult({ result }) {
         <div className="tool-card-head"><Icons.terminal /> Result — {display.length} records</div>
         <div className="tool-card-body">
           <table className="result-tbl">
-            <thead><tr>{keys.map(k => <th key={k}>{k.replace(/_/g,' ').toUpperCase()}</th>)}</tr></thead>
+            <thead><tr>{keys.map(k => <th key={k}>{k.replace(/_/g, ' ').toUpperCase()}</th>)}</tr></thead>
             <tbody>{display.map((row, i) => <tr key={i}>{keys.map(k => <td key={k} className={statusClass(row[k])}>{formatValue(row[k])}</td>)}</tr>)}</tbody>
           </table>
         </div>
       </div>
     )
   }
-  const entries = Object.entries(display).filter(([,v]) => typeof v !== 'object' || v === null)
-  const nested  = Object.entries(display).filter(([,v]) => typeof v === 'object' && v !== null)
+  const entries = Object.entries(display).filter(([, v]) => typeof v !== 'object' || v === null)
+  const nested = Object.entries(display).filter(([, v]) => typeof v === 'object' && v !== null)
   return (
     <div className="tool-card">
       <div className="tool-card-head"><Icons.terminal /> Tool Data</div>
       <div className="tool-card-body">
         {entries.length > 0 && (
           <div className="kv-grid" style={{ marginBottom: nested.length ? 10 : 0 }}>
-            {entries.map(([k,v]) => (
+            {entries.map(([k, v]) => (
               <span key={k} style={{ display: 'contents' }}>
-                <span className="kv-key">{k.replace(/_/g,' ')}:</span>
+                <span className="kv-key">{k.replace(/_/g, ' ')}:</span>
                 <span className={`kv-val ${statusClass(v)}`}>{formatValue(v)}</span>
               </span>
             ))}
           </div>
         )}
-        {nested.map(([k,v]) => (
+        {nested.map(([k, v]) => (
           <div key={k} style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{k.replace(/_/g,' ')}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{k.replace(/_/g, ' ')}</div>
             {Array.isArray(v) ? (
               <div style={{ fontSize: 12 }}>{v.join(', ')}</div>
             ) : (
               <div className="kv-grid">
-                {Object.entries(v || {}).map(([kk,vv]) => (
+                {Object.entries(v || {}).map(([kk, vv]) => (
                   <span key={kk} style={{ display: 'contents' }}>
-                    <span className="kv-key">{kk.replace(/_/g,' ')}:</span>
+                    <span className="kv-key">{kk.replace(/_/g, ' ')}:</span>
                     <span className={`kv-val ${statusClass(vv)}`}>{formatValue(vv)}</span>
                   </span>
                 ))}
@@ -612,6 +639,9 @@ function MessageRow({ msg }) {
         {msg.report && <ReportWidget report={msg.report} />}
         {msg.abap_check && <AbapReviewWidget abap_check={msg.abap_check} />}
         {msg.abap_code && <AbapCodeWidget abap_code={msg.abap_code} />}
+        {msg.tool_result && (msg.tool_result.outstanding_items || msg.tool_result.park_reference) && (
+          <ReceiptWidget initialData={msg.tool_result.outstanding_items ? msg.tool_result : null} />
+        )}
       </div>
     </div>
   )
@@ -708,22 +738,22 @@ function SettingsModal({ onClose, currentUser }) {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    apiFetch('/config').then(r => r.json()).then(d => setCfg(d)).catch(() => {})
-    apiFetch('/config/mcp-servers').then(r => r.json()).then(d => setMcpServers(d.servers || [])).catch(() => {})
+    apiFetch('/config').then(r => r.json()).then(d => setCfg(d)).catch(() => { })
+    apiFetch('/config/mcp-servers').then(r => r.json()).then(d => setMcpServers(d.servers || [])).catch(() => { })
   }, [])
   useEffect(() => {
     if (tab === 'audit' && isAdmin) {
       setAuditLoading(true)
-      apiFetch('/audit/logs?limit=50').then(r => r.json()).then(d => setAuditLogs(d.logs || [])).catch(() => {}).finally(() => setAuditLoading(false))
+      apiFetch('/audit/logs?limit=50').then(r => r.json()).then(d => setAuditLogs(d.logs || [])).catch(() => { }).finally(() => setAuditLoading(false))
     }
     if (tab === 'users' && isAdmin) {
       setUsersLoading(true)
-      apiFetch('/auth/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => {}).finally(() => setUsersLoading(false))
+      apiFetch('/auth/users').then(r => r.json()).then(d => setUsers(d.users || [])).catch(() => { }).finally(() => setUsersLoading(false))
     }
   }, [tab, isAdmin])
 
-  const setSap    = (k, v) => setCfg(c => ({ ...c, sap:    { ...c.sap,    [k]: v } }))
-  const setMcp    = (k, v) => setCfg(c => ({ ...c, mcp:    { ...c.mcp,    [k]: v } }))
+  const setSap = (k, v) => setCfg(c => ({ ...c, sap: { ...c.sap, [k]: v } }))
+  const setMcp = (k, v) => setCfg(c => ({ ...c, mcp: { ...c.mcp, [k]: v } }))
   const setOllama = (k, v) => setCfg(c => ({ ...c, ollama: { ...c.ollama, [k]: v } }))
 
   const handleSave = async () => {
@@ -821,8 +851,8 @@ function SettingsModal({ onClose, currentUser }) {
   const connType = cfg.sap?.connection_type || 'mock'
   const authType = cfg.sap?.auth_type || 'basic'
   const tabs = [
-    { id: 'sap',    label: 'SAP Connection' },
-    { id: 'mcp',    label: 'MCP Servers' },
+    { id: 'sap', label: 'SAP Connection' },
+    { id: 'mcp', label: 'MCP Servers' },
     { id: 'ollama', label: 'LLM / Ollama' },
     { id: 'claude', label: 'Claude Desktop' },
     ...(isAdmin ? [{ id: 'users', label: 'Users & Roles' }, { id: 'audit', label: 'Audit Logs' }] : []),
@@ -848,8 +878,8 @@ function SettingsModal({ onClose, currentUser }) {
               <div className="form-section">Connection Type</div>
               <div className="conn-group">
                 {[{ v: 'mock', icon: '🎭', label: 'Mock / Demo', sub: 'Simulated data — no SAP needed' },
-                  { v: 'cloud', icon: '☁️', label: 'SAP Cloud', sub: 'BTP, S/4HANA Cloud, Rise' },
-                  { v: 'on_premise', icon: '🏢', label: 'On-Premise', sub: 'SAP ECC, S/4HANA On-Prem' }]
+                { v: 'cloud', icon: '☁️', label: 'SAP Cloud', sub: 'BTP, S/4HANA Cloud, Rise' },
+                { v: 'on_premise', icon: '🏢', label: 'On-Premise', sub: 'SAP ECC, S/4HANA On-Prem' }]
                   .map(o => (
                     <button key={o.v} className={`conn-btn ${connType === o.v ? 'active' : ''}`} onClick={() => setSap('connection_type', o.v)}>
                       <div className="conn-icon">{o.icon}</div>
@@ -1177,34 +1207,34 @@ function SettingsModal({ onClose, currentUser }) {
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -14 }}>Written to <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>logs/audit_YYYY-MM-DD.jsonl</code> · Retain 7 years for SOX compliance</div>
             {auditLoading ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
               : auditLogs.length === 0 ? <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No records yet. Records appear after the first /chat call.</p>
-              : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="result-tbl audit-tbl">
-                    <thead><tr><th>Time</th><th>User</th><th>Role</th><th>Tool</th><th>Query</th><th>ms</th></tr></thead>
-                    <tbody>
-                      {auditLogs.map((log, i) => (
-                        <tr key={i}>
-                          <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{new Date(log.timestamp).toLocaleTimeString()}</td>
-                          <td style={{ fontWeight: 600 }}>{log.user_id}</td>
-                          <td>{(log.user_roles || []).join(', ')}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{log.tool_called || '—'}</td>
-                          <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.query}>{log.query}</td>
-                          <td>{log.duration_ms}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="result-tbl audit-tbl">
+                      <thead><tr><th>Time</th><th>User</th><th>Role</th><th>Tool</th><th>Query</th><th>ms</th></tr></thead>
+                      <tbody>
+                        {auditLogs.map((log, i) => (
+                          <tr key={i}>
+                            <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{new Date(log.timestamp).toLocaleTimeString()}</td>
+                            <td style={{ fontWeight: 600 }}>{log.user_id}</td>
+                            <td>{(log.user_roles || []).join(', ')}</td>
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{log.tool_called || '—'}</td>
+                            <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.query}>{log.query}</td>
+                            <td>{log.duration_ms}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
           </>}
         </div>
 
         <div className="modal-foot">
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {saveStatus === 'ok'  && <span className="save-status ok"><Icons.check /> Saved</span>}
+            {saveStatus === 'ok' && <span className="save-status ok"><Icons.check /> Saved</span>}
             {saveStatus === 'err' && <span className="save-status err"><Icons.alert /> Save failed</span>}
-            {['sap','mcp','ollama'].includes(tab) && (
+            {['sap', 'mcp', 'ollama'].includes(tab) && (
               <button className="btn btn-primary" onClick={handleSave} disabled={saving || !isAdmin}>
                 {saving ? 'Saving…' : isAdmin ? 'Save Configuration' : 'Admin only'}
               </button>
@@ -1257,7 +1287,7 @@ function LoginScreen({ onLogin }) {
         </form>
         <div className="login-demo">
           <span>Demo:</span>
-          <code>admin / Admin@123</code>
+          <code>admin / SapAdmin@2026!</code>
           <code>fi_user / Finance@123</code>
           <code>hr_user / HR@123</code>
           <code>demo / demo</code>
@@ -1281,7 +1311,7 @@ function _relativeDate(iso) {
 }
 
 function Sidebar({ activeModule, onModuleClick, onReset, sapMode, allowedModules,
-                   conversations, sessionId, onNewChat, onLoadConversation, onDeleteConversation }) {
+  conversations, sessionId, onNewChat, onLoadConversation, onDeleteConversation }) {
   const visible = MODULES.filter(m => m.id === 'all' || allowedModules === null || allowedModules.includes(m.moduleKey))
   const modeLabel = { mock: '🎭 Mock mode', cloud: '☁️ SAP Cloud', on_premise: '🏢 On-Premise' }[sapMode] || sapMode
   return (
@@ -1305,14 +1335,14 @@ function Sidebar({ activeModule, onModuleClick, onReset, sapMode, allowedModules
           <div className="history-list">
             {conversations.map(c => (
               <div key={c.session_id}
-                   className={`history-item ${c.session_id === sessionId ? 'active' : ''}`}
-                   onClick={() => onLoadConversation(c.session_id)}>
+                className={`history-item ${c.session_id === sessionId ? 'active' : ''}`}
+                onClick={() => onLoadConversation(c.session_id)}>
                 <div className="history-item-body">
                   <span className="history-item-title">{c.title || 'Untitled'}</span>
                   <span className="history-item-date">{_relativeDate(c.updated_at)}</span>
                 </div>
                 <button className="history-del-btn" title="Delete"
-                        onClick={e => { e.stopPropagation(); onDeleteConversation(c.session_id) }}>
+                  onClick={e => { e.stopPropagation(); onDeleteConversation(c.session_id) }}>
                   <Icons.trash />
                 </button>
               </div>
@@ -1448,12 +1478,12 @@ export default function App() {
             if (mod) setActiveModule(mod.id)
           }
         }
-      }).catch(() => {})
+      }).catch(() => { })
   }, [authToken, handleLogout])
 
   useEffect(() => {
     if (needsLogin) return
-    apiFetch('/tools').then(r => { if (r.status === 401) { handleLogout(); return } return r.json() }).then(d => d).catch(() => {})
+    apiFetch('/tools').then(r => { if (r.status === 401) { handleLogout(); return } return r.json() }).then(d => d).catch(() => { })
   }, [authToken, needsLogin, handleLogout])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingMsg, loading])
@@ -1463,7 +1493,7 @@ export default function App() {
     try {
       const res = await apiFetch('/conversations')
       if (res.ok) { const d = await res.json(); setConversations(d.conversations || []) }
-    } catch {}
+    } catch { }
   }, [])
 
   useEffect(() => {
@@ -1482,7 +1512,7 @@ export default function App() {
   }, [currentUser])
 
   const handleLoadConversation = useCallback(async (sid) => {
-    if (rafRef.current)      { cancelAnimationFrame(rafRef.current);      rafRef.current = null }
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
     if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
     setStreamingMsg(null)
     setLoading(false)
@@ -1509,7 +1539,7 @@ export default function App() {
       setViewMode('conversation')
       window.location.hash = `#/chat/${encodeURIComponent(sid)}`
       if (currentUser?.user_id) localStorage.setItem(`sap_session_${currentUser.user_id}`, sid)
-    } catch {}
+    } catch { }
   }, [currentUser])
 
   // Restore conversation from URL hash on page load / login
@@ -1543,7 +1573,7 @@ export default function App() {
       await apiFetch(`/conversations/${encodeURIComponent(sid)}`, { method: 'DELETE' })
       setConversations(prev => prev.filter(c => c.session_id !== sid))
       if (sid === sessionId) { handleNewChat() }
-    } catch {}
+    } catch { }
   }, [sessionId, handleNewChat])
 
   const handleSettingsClose = () => {
@@ -1552,7 +1582,7 @@ export default function App() {
       if (d.model) setModel(d.model)
       if (d.sap_mode) setSapMode(d.sap_mode)
       setOllamaStatus(d.llm_connected ? 'connected' : 'disconnected')
-    }).catch(() => {})
+    }).catch(() => { })
   }
 
   const userInitial = currentUser ? (currentUser.full_name || currentUser.user_id)[0].toUpperCase() : 'U'
@@ -1636,7 +1666,7 @@ export default function App() {
           let dataStr = ''
           for (const line of lines) {
             if (line.startsWith('event: ')) eventType = line.slice(7).trim()
-            if (line.startsWith('data: '))  dataStr   = line.slice(6).trim()
+            if (line.startsWith('data: ')) dataStr = line.slice(6).trim()
           }
           if (!dataStr) continue
           let payload
@@ -1683,13 +1713,13 @@ export default function App() {
               role: 'bot',
               content: streamingRef.current.content,
               status_steps: streamingRef.current.status_steps,
-              tool_called:  payload.tool_called  || null,
-              tool_result:  payload.tool_result  || null,
-              sap_source:   payload.sap_source   || null,
-              report:       payload.report        || null,
-              abap_check:   payload.abap_check    || null,
-              abap_code:    payload.abap_code     || null,
-              tableData:    tableRef.current ? { ...tableRef.current, loading: false } : null,
+              tool_called: payload.tool_called || null,
+              tool_result: payload.tool_result || null,
+              sap_source: payload.sap_source || null,
+              report: payload.report || null,
+              abap_check: payload.abap_check || null,
+              abap_code: payload.abap_code || null,
+              tableData: tableRef.current ? { ...tableRef.current, loading: false } : null,
             }
             setStreamingMsg(null)
             setMessages(p => [...p, finalMsg])
@@ -1713,7 +1743,7 @@ export default function App() {
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }
   const handleReset = async () => {
     setMessages([]); setStreamingMsg(null)
-    try { await apiFetch('/reset', { method: 'POST', body: JSON.stringify({ message: '', model, session_id: sessionId }) }) } catch {}
+    try { await apiFetch('/reset', { method: 'POST', body: JSON.stringify({ message: '', model, session_id: sessionId }) }) } catch { }
   }
 
   const currentModule = MODULES.find(m => m.id === activeModule) || MODULES[0]

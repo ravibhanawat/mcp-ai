@@ -90,7 +90,8 @@ python main.py --model mistral
 
 ### 5. Use as REST API
 ```bash
-uvicorn api_server:app --reload --port 8000
+
+ uvicorn api.server:app --reload --port 8000 
 ```
 
 ---
@@ -243,3 +244,4 @@ r = requests.get(url, auth=('user', 'pass'))
 ## License
 
 MIT — see [LICENSE](LICENSE)
+SapAdmin@2026!

@@ -343,6 +343,113 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Migration: add status_steps to existing installations
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS status_steps JSONB DEFAULT '[]'::jsonb;
 
+-- ── Real Estate — Alembic Parivartan Project ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS re_customers (
+    customer_id     VARCHAR(10)   PRIMARY KEY,
+    name            VARCHAR(120)  NOT NULL,
+    pan_number      VARCHAR(15),
+    aadhaar         VARCHAR(20),
+    dob             DATE,
+    phone           VARCHAR(20),
+    email           VARCHAR(120),
+    address         TEXT,
+    city            VARCHAR(80),
+    state           VARCHAR(60),
+    project         VARCHAR(40),    -- CLOUD_FOREST | PARK_CRESCENT
+    unit_number     VARCHAR(20)   NOT NULL,
+    tower           VARCHAR(10),
+    floor           VARCHAR(10),
+    area_sqft       DECIMAL(10,2),
+    area_sqm        DECIMAL(10,2),
+    sale_value      DECIMAL(18,2),
+    gst_number      VARCHAR(20),    -- STCD3 — populated for B2B customers
+    co_applicant    VARCHAR(120),
+    booking_date    DATE,
+    created_at      TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS re_milestones (
+    id              INTEGER       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_id     VARCHAR(10)   NOT NULL,
+    unit_number     VARCHAR(20)   NOT NULL,
+    milestone_code  VARCHAR(10)   NOT NULL,
+    description     VARCHAR(120)  NOT NULL,
+    billing_doc_no  VARCHAR(15),
+    basic_amt       DECIMAL(18,2) DEFAULT 0.00,
+    cgst_amt        DECIMAL(18,2) DEFAULT 0.00,
+    sgst_amt        DECIMAL(18,2) DEFAULT 0.00,
+    tds_amt         DECIMAL(18,2) DEFAULT 0.00,
+    basic_collected DECIMAL(18,2) DEFAULT 0.00,
+    cgst_collected  DECIMAL(18,2) DEFAULT 0.00,
+    sgst_collected  DECIMAL(18,2) DEFAULT 0.00,
+    tds_collected   DECIMAL(18,2) DEFAULT 0.00,
+    status          VARCHAR(20)   DEFAULT 'PENDING',  -- PENDING | PARTIAL | COLLECTED
+    billing_date    DATE,
+    created_at      TIMESTAMPTZ   DEFAULT NOW(),
+    CONSTRAINT uq_milestone UNIQUE (customer_id, unit_number, milestone_code)
+);
+
+CREATE TABLE IF NOT EXISTS customer_receipts (
+    park_ref        VARCHAR(15)   PRIMARY KEY,
+    customer_id     VARCHAR(10)   NOT NULL,
+    unit_number     VARCHAR(20)   NOT NULL,
+    payment_mode    VARCHAR(40)   NOT NULL,
+    amount          DECIMAL(18,2) NOT NULL,
+    instrument_ref  VARCHAR(50),
+    instrument_date DATE,
+    bank_name       VARCHAR(100),
+    excess_basic    DECIMAL(18,2) DEFAULT 0.00,
+    excess_tds      DECIMAL(18,2) DEFAULT 0.00,
+    status          VARCHAR(10)   DEFAULT 'PARKED',   -- PARKED | POSTED | REVERSED
+    fi_doc_no       VARCHAR(15),
+    posted_at       TIMESTAMPTZ,
+    parked_at       TIMESTAMPTZ   DEFAULT NOW(),
+    created_at      TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS receipt_allocations (
+    id              INTEGER       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    park_ref        VARCHAR(15)   NOT NULL,
+    milestone_code  VARCHAR(10)   NOT NULL,
+    billing_doc_no  VARCHAR(15),
+    basic_applied   DECIMAL(18,2) DEFAULT 0.00,
+    cgst_applied    DECIMAL(18,2) DEFAULT 0.00,
+    sgst_applied    DECIMAL(18,2) DEFAULT 0.00,
+    tds_applied     DECIMAL(18,2) DEFAULT 0.00,
+    created_at      TIMESTAMPTZ   DEFAULT NOW(),
+    FOREIGN KEY (park_ref) REFERENCES customer_receipts(park_ref)
+);
+
+CREATE TABLE IF NOT EXISTS re_brokers (
+    broker_id       VARCHAR(10)   PRIMARY KEY,
+    name            VARCHAR(120)  NOT NULL,
+    pan             VARCHAR(15),
+    gstin           VARCHAR(20),
+    phone           VARCHAR(20),
+    payout_pct      DECIMAL(5,2)  DEFAULT 1.50,  -- % of sale value
+    bank_account    VARCHAR(30),
+    bank_name       VARCHAR(100),
+    status          VARCHAR(10)   DEFAULT 'ACTIVE',
+    created_at      TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS re_broker_bookings (
+    id              INTEGER       GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    broker_id       VARCHAR(10)   NOT NULL,
+    customer_id     VARCHAR(10)   NOT NULL,
+    unit_number     VARCHAR(20)   NOT NULL,
+    sale_value      DECIMAL(18,2) NOT NULL,
+    payout_amount   DECIMAL(18,2),
+    collected_pct   DECIMAL(5,2)  DEFAULT 0.00,
+    po_number       VARCHAR(15),
+    po_status       VARCHAR(20)   DEFAULT 'NOT_CREATED',  -- NOT_CREATED | CREATED | RELEASED
+    miro_status     VARCHAR(20)   DEFAULT 'PENDING',
+    tagged_date     DATE,
+    created_at      TIMESTAMPTZ   DEFAULT NOW(),
+    FOREIGN KEY (broker_id) REFERENCES re_brokers(broker_id)
+);
+
 -- ── Indexes ─────────────────────────────────────────────────────────────────────
 
 -- Standard indexes
@@ -378,3 +485,8 @@ CREATE INDEX IF NOT EXISTS idx_employees_active
 CREATE INDEX IF NOT EXISTS idx_stock_reorder
     ON stock(material_id, plant)
     WHERE (unrestricted - reserved) < reorder_point;
+
+CREATE INDEX IF NOT EXISTS idx_re_milestones_cust   ON re_milestones(customer_id, unit_number);
+CREATE INDEX IF NOT EXISTS idx_re_receipts_cust     ON customer_receipts(customer_id, unit_number);
+CREATE INDEX IF NOT EXISTS idx_re_receipts_status   ON customer_receipts(status);
+CREATE INDEX IF NOT EXISTS idx_broker_bookings_id   ON re_broker_bookings(broker_id);

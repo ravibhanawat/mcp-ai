@@ -72,12 +72,13 @@ class SAPAgent:
         # Do not auto-generate from registry — name mismatch causes hallucinations.
         if self._use_mlx:
             tool_list_str = (
-                "FI/CO: get_vendor_info, get_invoice_status, get_open_invoices, get_cost_center_budget, list_all_cost_centers\n"
+                "FI/CO: get_vendor_info, get_invoice_status, get_open_invoices, get_cost_center_budget, list_all_cost_centers, get_gl_posting_for_receipt, get_customer_ledger, get_tds_certificate_data\n"
                 "MM: get_material_info, get_stock_level, get_purchase_order, check_reorder_needed, get_bom\n"
-                "SD: get_customer_info, get_sales_order, get_delivery_status, get_pricing_info, list_open_orders\n"
+                "SD: get_customer_info, get_sales_order, get_delivery_status, get_pricing_info, list_open_orders, get_sales_deed_data, get_allotment_letter_data, validate_einvoice_b2b, get_broker_payout_status, initiate_broker_po\n"
                 "HR: get_employee_info, get_leave_balance, get_payslip, list_employees, get_org_chart\n"
                 "PP: get_production_order, get_capacity_utilization, get_work_center_info, get_bom_explosion, get_planned_orders\n"
-                "ABAP: get_abap_program, get_function_module, get_transport_request, list_abap_programs, analyze_abap_syntax"
+                "ABAP: get_abap_program, get_function_module, get_transport_request, list_abap_programs, analyze_abap_syntax\n"
+                "RE: get_customer_unit_outstanding, calculate_receipt_allocation, park_customer_receipt, post_customer_receipt, get_receipt_history, get_milestone_billing_status"
             )
             return (
                 "You are SAP Enterprise AI Agent. "
@@ -231,6 +232,42 @@ Assistant: {{"tool_call": {{"name": "search_employees", "parameters": {{}}}}}}
 
 User: show all employees in HR department
 Assistant: {{"tool_call": {{"name": "search_employees", "parameters": {{"dept": "HR"}}}}}}
+
+User: show outstanding dues for customer ALEC001 unit T1-304
+Assistant: {{"tool_call": {{"name": "get_customer_unit_outstanding", "parameters": {{"customer_id": "ALEC001", "unit_number": "T1-304"}}}}}}
+
+User: what are the pending milestones for ALEC002 T2-201?
+Assistant: {{"tool_call": {{"name": "get_milestone_billing_status", "parameters": {{"customer_id": "ALEC002", "unit_number": "T2-201"}}}}}}
+
+User: park a cheque receipt of 500000 for ALEC001 unit T1-304, cheque 891234 dated 2026-04-01 HDFC Bank
+Assistant: {{"tool_call": {{"name": "park_customer_receipt", "parameters": {{"customer_id": "ALEC001", "unit_number": "T1-304", "payment_mode": "Cheque", "amount": 500000, "instrument_ref": "891234", "instrument_date": "2026-04-01", "bank_name": "HDFC Bank"}}}}}}
+
+User: post the parked receipt PRK00000001
+Assistant: {{"tool_call": {{"name": "post_customer_receipt", "parameters": {{"park_reference": "PRK00000001"}}}}}}
+
+User: show receipt history for ALEC001 flat T1-304
+Assistant: {{"tool_call": {{"name": "get_receipt_history", "parameters": {{"customer_id": "ALEC001", "unit_number": "T1-304"}}}}}}
+
+User: get sales deed data for customer ALEC001 unit T1-304
+Assistant: {{"tool_call": {{"name": "get_sales_deed_data", "parameters": {{"customer_id": "ALEC001", "unit_number": "T1-304"}}}}}}
+
+User: generate allotment letter for ALEC003 unit PC-1102
+Assistant: {{"tool_call": {{"name": "get_allotment_letter_data", "parameters": {{"customer_id": "ALEC003", "unit_number": "PC-1102", "project_code": "PARK_CRESCENT"}}}}}}
+
+User: check e-invoice for billing doc 9000010001
+Assistant: {{"tool_call": {{"name": "validate_einvoice_b2b", "parameters": {{"billing_doc_no": "9000010001"}}}}}}
+
+User: show broker payout status for BR001
+Assistant: {{"tool_call": {{"name": "get_broker_payout_status", "parameters": {{"broker_id": "BR001"}}}}}}
+
+User: initiate broker PO for BR001 unit T1-304
+Assistant: {{"tool_call": {{"name": "initiate_broker_po", "parameters": {{"broker_id": "BR001", "unit_number": "T1-304"}}}}}}
+
+User: show customer ledger for ALEC001 T1-304
+Assistant: {{"tool_call": {{"name": "get_customer_ledger", "parameters": {{"customer_id": "ALEC001", "unit_number": "T1-304"}}}}}}
+
+User: TDS certificate for ALEC001 FY 2025-26
+Assistant: {{"tool_call": {{"name": "get_tds_certificate_data", "parameters": {{"customer_id": "ALEC001", "fiscal_year": "2025-26"}}}}}}
 
 ═══════════════════════════════════════
 DOCUMENTATION SEARCH RULE

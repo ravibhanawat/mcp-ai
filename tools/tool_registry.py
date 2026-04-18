@@ -5,7 +5,7 @@ Every tool includes SAP source attribution (BAPI / T-code / table)
 so answers can be verified directly in SAP — a Trust requirement.
 """
 import json
-from modules import fi_co, mm, sd, hr, pp, abap
+from modules import fi_co, mm, sd, hr, pp, abap, receipt
 from modules.sap_knowledge_base import search_sap_docs
 
 # ─────────────────────────────────────────
@@ -53,6 +53,23 @@ SAP_SOURCES: dict[str, dict] = {
     "generate_abap_code":       {"bapi": "N/A",  "tcode": "SE38",  "table": "N/A",    "verify": "T-code SE38 → ABAP Editor"},
     # Knowledge Base
     "search_sap_docs":          {"bapi": "N/A",  "tcode": "N/A",   "table": "N/A",    "verify": "SAP Knowledge Base (built-in)"},
+    # RE — Receipt (ZFI_RECEIPT_PARK / ZFI_RECEIPT_POST)
+    "get_customer_unit_outstanding": {"bapi": "Z_RE_GET_OUTSTANDING",  "tcode": "ZFI_RECEIPT_PARK", "table": "re_customers/re_milestones", "verify": "T-code ZFI_RECEIPT_PARK → Receipt Creation Screen"},
+    "calculate_receipt_allocation":  {"bapi": "Z_RE_CALC_ALLOCATION",  "tcode": "ZFI_RECEIPT_PARK", "table": "re_milestones",              "verify": "T-code ZFI_RECEIPT_PARK → FIFO Allocation Logic"},
+    "park_customer_receipt":         {"bapi": "Z_RE_RECEIPT_PARK",     "tcode": "ZFI_RECEIPT_PARK", "table": "customer_receipts",          "verify": "T-code ZFI_RECEIPT_PARK → Park Receipt"},
+    "post_customer_receipt":         {"bapi": "Z_RE_RECEIPT_POST",     "tcode": "ZFI_RECEIPT_POST", "table": "customer_receipts",          "verify": "T-code ZFI_RECEIPT_POST → Post Receipt to FI"},
+    "get_receipt_history":           {"bapi": "Z_RE_RECEIPT_LIST",     "tcode": "ZFI_RECEIPT_PARK", "table": "customer_receipts",          "verify": "T-code ZFI_RECEIPT_PARK → Receipt History"},
+    "get_milestone_billing_status":  {"bapi": "BAPI_BILLING_GETDETAIL","tcode": "VF03",             "table": "re_milestones",              "verify": "T-code VF03 → Display Billing Document"},
+    # RE — SD Parivartan
+    "get_sales_deed_data":           {"bapi": "Z_SD_PRINT_WFRICE",     "tcode": "ZSD_PRINT",        "table": "re_customers/re_milestones", "verify": "T-code ZSD_PRINT → Sales Deed Smartform"},
+    "get_allotment_letter_data":     {"bapi": "Z_SD_PRINT_ALLOTMENT",  "tcode": "ZSD_PRINT",        "table": "re_customers/re_milestones", "verify": "T-code ZSD_PRINT → Allotment Letter Smartform"},
+    "validate_einvoice_b2b":         {"bapi": "Z_EINV_VALIDATE",       "tcode": "VF01",             "table": "re_customers/J_1IGINVREFNUM","verify": "T-code VF01 → Billing Output + E-Invoice Check"},
+    "get_broker_payout_status":      {"bapi": "Z_SD_BROKER_PAYOUT",    "tcode": "ZSD_BROKER",       "table": "re_brokers/re_broker_bookings","verify": "T-code ZSD_BROKER → Broker Payout Status"},
+    "initiate_broker_po":            {"bapi": "BAPI_PO_CREATE1",       "tcode": "ME21N",            "table": "re_broker_bookings/EKKO",    "verify": "T-code ME21N → Create Broker Payout PO"},
+    # RE — FI Parivartan
+    "get_gl_posting_for_receipt":    {"bapi": "BAPI_ACC_DOCUMENT_POST","tcode": "FB01",             "table": "customer_receipts/BKPF",     "verify": "T-code FB01 → Post FI Document"},
+    "get_customer_ledger":           {"bapi": "BAPI_CUSTOMER_GETACCOUNTDETAIL","tcode": "FBL5N",    "table": "re_milestones/customer_receipts/BSID","verify": "T-code FBL5N → Customer Line Items"},
+    "get_tds_certificate_data":      {"bapi": "N/A",                   "tcode": "S_PH0_48000514",   "table": "customer_receipts/WITH_ITEM","verify": "T-code S_PH0_48000514 → TDS Certificate"},
 }
 
 
@@ -414,6 +431,207 @@ TOOLS = [
             "required": ["code_snippet"]
         }
     },
+    # ── RE — Receipt Tools (ZFI_RECEIPT_PARK / ZFI_RECEIPT_POST) ──
+    {
+        "name": "get_customer_unit_outstanding",
+        "description": "Get outstanding milestone billing documents for a real estate customer and unit. Use when user asks about dues, outstanding amounts, or receipt creation for Alembic Parivartan project.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id":  {"type": "string", "description": "RE Customer ID, e.g. ALEC001"},
+                "unit_number":  {"type": "string", "description": "Unit number, e.g. T1-304, PC-1102"}
+            },
+            "required": ["customer_id", "unit_number"]
+        }
+    },
+    {
+        "name": "calculate_receipt_allocation",
+        "description": "Calculate FIFO allocation of a payment across outstanding milestone billing documents. Use to preview how a receipt will be applied before parking.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id":   {"type": "string", "description": "RE Customer ID"},
+                "unit_number":   {"type": "string", "description": "Unit number"},
+                "payment_mode":  {
+                    "type": "string",
+                    "description": "Payment mode",
+                    "enum": ["Cheque","Demand Draft","Direct Remittance","TDS","Debit/Credit Card","Cash","Credit Note Basic Excess","Credit Note TDS Excess","On Account","Journal Voucher"]
+                },
+                "amount":        {"type": "number", "description": "Payment amount in INR"},
+                "reference":     {"type": "string", "description": "Optional instrument reference"}
+            },
+            "required": ["customer_id", "unit_number", "payment_mode", "amount"]
+        }
+    },
+    {
+        "name": "park_customer_receipt",
+        "description": "Park a customer receipt in SAP (ZFI_RECEIPT_PARK). Allocates payment using FIFO logic and saves as PARKED. Returns park reference number.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id":    {"type": "string", "description": "RE Customer ID"},
+                "unit_number":    {"type": "string", "description": "Unit number"},
+                "payment_mode":   {
+                    "type": "string",
+                    "enum": ["Cheque","Demand Draft","Direct Remittance","TDS","Debit/Credit Card","Cash","Credit Note Basic Excess","Credit Note TDS Excess","On Account","Journal Voucher"]
+                },
+                "amount":         {"type": "number", "description": "Amount in INR"},
+                "instrument_ref": {"type": "string", "description": "Cheque/DD/UTR number"},
+                "instrument_date":{"type": "string", "description": "Instrument date (YYYY-MM-DD)"},
+                "bank_name":      {"type": "string", "description": "Bank name"}
+            },
+            "required": ["customer_id", "unit_number", "payment_mode", "amount", "instrument_ref", "instrument_date"]
+        }
+    },
+    {
+        "name": "post_customer_receipt",
+        "description": "Post a parked receipt to FI (ZFI_RECEIPT_POST). Updates milestone collections and generates FI document number.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "park_reference": {"type": "string", "description": "Park reference number, e.g. PRK00000001"}
+            },
+            "required": ["park_reference"]
+        }
+    },
+    {
+        "name": "get_receipt_history",
+        "description": "Get receipt history (parked and posted) for a customer and unit in Alembic Parivartan project.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string", "description": "RE Customer ID"},
+                "unit_number": {"type": "string", "description": "Unit number"}
+            },
+            "required": ["customer_id", "unit_number"]
+        }
+    },
+    {
+        "name": "get_milestone_billing_status",
+        "description": "Get milestone-wise billing and collection status for a real estate customer — raised, collected, outstanding per milestone.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string", "description": "RE Customer ID"},
+                "unit_number": {"type": "string", "description": "Unit number"}
+            },
+            "required": ["customer_id", "unit_number"]
+        }
+    },
+    # ── RE — SD Parivartan (ZSD_PRINT Smartforms, E-Invoice, Broker) ──
+    {
+        "name": "get_sales_deed_data",
+        "description": "Get Sales Deed data for a customer and unit (SD01E — ZSD_PRINT Smartform). Returns customer, unit, and financial details for legal document generation.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string", "description": "RE Customer ID"},
+                "unit_number": {"type": "string", "description": "Unit number"}
+            },
+            "required": ["customer_id", "unit_number"]
+        }
+    },
+    {
+        "name": "get_allotment_letter_data",
+        "description": "Get Allotment Letter data for a customer/unit. SD01J for Cloud Forest, SD01K for Park Crescent. Use project_code to select the correct letter format.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id":  {"type": "string", "description": "RE Customer ID"},
+                "unit_number":  {"type": "string", "description": "Unit number"},
+                "project_code": {
+                    "type": "string",
+                    "description": "Project code",
+                    "enum": ["CLOUD_FOREST", "PARK_CRESCENT"]
+                }
+            },
+            "required": ["customer_id", "unit_number", "project_code"]
+        }
+    },
+    {
+        "name": "validate_einvoice_b2b",
+        "description": "Validate e-Invoice for a B2B billing document at VF01 (SD01F). Checks if customer has GSTIN (B2B) and verifies IRN exists in J_1IGINVREFNUM.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "billing_doc_no": {"type": "string", "description": "Billing document number, e.g. 9000010001"}
+            },
+            "required": ["billing_doc_no"]
+        }
+    },
+    {
+        "name": "get_broker_payout_status",
+        "description": "Get broker payout eligibility and status for all bookings. Shows collection %, payout amount, and eligibility (min 20% collection required).",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "broker_id": {"type": "string", "description": "Broker ID, e.g. BR001"}
+            },
+            "required": ["broker_id"]
+        }
+    },
+    {
+        "name": "initiate_broker_po",
+        "description": "Create a broker payout PO (ME21N) for an eligible booking. Validates 20% collection threshold. Returns PO number and release workflow status.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "broker_id":   {"type": "string", "description": "Broker ID"},
+                "unit_number": {"type": "string", "description": "Unit number"}
+            },
+            "required": ["broker_id", "unit_number"]
+        }
+    },
+    # ── RE — FI Parivartan ──
+    {
+        "name": "get_gl_posting_for_receipt",
+        "description": "Show GL account mapping for a receipt posting in FI (FB01). Use to verify how a receipt will be posted to the general ledger.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "park_reference": {"type": "string", "description": "Park reference number"}
+            },
+            "required": ["park_reference"]
+        }
+    },
+    {
+        "name": "get_customer_ledger",
+        "description": "FBL5N-style customer ledger — all debit (billing) and credit (receipt) entries with running balance for a real estate customer.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string", "description": "RE Customer ID"},
+                "unit_number": {"type": "string", "description": "Unit number"}
+            },
+            "required": ["customer_id", "unit_number"]
+        }
+    },
+    {
+        "name": "get_tds_certificate_data",
+        "description": "Get TDS deduction summary for Form 16A / 26QB compliance for a real estate customer.",
+        "module": "RE",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "customer_id":  {"type": "string", "description": "RE Customer ID"},
+                "fiscal_year":  {"type": "string", "description": "Fiscal year in format 2025-26"}
+            },
+            "required": ["customer_id", "fiscal_year"]
+        }
+    },
     # ── Knowledge Base / Documentation Tool ──
     {
         "name": "search_sap_docs",
@@ -482,6 +700,23 @@ FUNCTION_MAP = {
     "generate_abap_code": abap.generate_abap_code,
     # Knowledge Base
     "search_sap_docs": search_sap_docs,
+    # RE — Receipt
+    "get_customer_unit_outstanding": receipt.get_customer_unit_outstanding,
+    "calculate_receipt_allocation":  receipt.calculate_receipt_allocation,
+    "park_customer_receipt":         receipt.park_customer_receipt,
+    "post_customer_receipt":         receipt.post_customer_receipt,
+    "get_receipt_history":           receipt.get_receipt_history,
+    "get_milestone_billing_status":  receipt.get_milestone_billing_status,
+    # RE — SD
+    "get_sales_deed_data":           sd.get_sales_deed_data,
+    "get_allotment_letter_data":     sd.get_allotment_letter_data,
+    "validate_einvoice_b2b":         sd.validate_einvoice_b2b,
+    "get_broker_payout_status":      sd.get_broker_payout_status,
+    "initiate_broker_po":            sd.initiate_broker_po,
+    # RE — FI
+    "get_gl_posting_for_receipt":    fi_co.get_gl_posting_for_receipt,
+    "get_customer_ledger":           fi_co.get_customer_ledger,
+    "get_tds_certificate_data":      fi_co.get_tds_certificate_data,
 }
 
 

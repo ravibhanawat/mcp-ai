@@ -7,13 +7,14 @@ Each role maps to specific SAP modules.
 
 # Maps role name → list of SAP modules accessible
 ROLE_MODULES: dict[str, list[str]] = {
-    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap"],
+    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap", "receipt"],
     "fi_co_analyst":  ["fi_co"],
     "mm_analyst":     ["mm"],
     "sd_analyst":     ["sd"],
     "hr_manager":     ["hr"],
     "pp_planner":     ["pp"],
     "abap_developer": ["abap"],
+    "re_analyst":     ["sd", "fi_co", "receipt", "fi_co_re"],   # Alembic RE sales team
     "read_only":      [],   # general questions only, no SAP data
 }
 
@@ -27,6 +28,9 @@ MODULE_TOOLS: dict[str, list[str]] = {
         "get_open_invoices",
         "get_cost_center_budget",
         "list_all_cost_centers",
+        "get_gl_posting_for_receipt",
+        "get_customer_ledger",
+        "get_tds_certificate_data",
     ],
     "mm": [
         "get_material_info",
@@ -41,6 +45,11 @@ MODULE_TOOLS: dict[str, list[str]] = {
         "get_customer_orders",
         "create_sales_order",
         "list_open_sales_orders",
+        "get_sales_deed_data",
+        "get_allotment_letter_data",
+        "validate_einvoice_b2b",
+        "get_broker_payout_status",
+        "initiate_broker_po",
     ],
     "hr": [
         "get_employee_info",
@@ -62,6 +71,19 @@ MODULE_TOOLS: dict[str, list[str]] = {
         "get_transport_request",
         "list_abap_programs",
         "analyze_abap_syntax",
+    ],
+    "receipt": [
+        "get_customer_unit_outstanding",
+        "calculate_receipt_allocation",
+        "park_customer_receipt",
+        "post_customer_receipt",
+        "get_receipt_history",
+        "get_milestone_billing_status",
+    ],
+    "fi_co_re": [
+        "get_gl_posting_for_receipt",
+        "get_customer_ledger",
+        "get_tds_certificate_data",
     ],
 }
 
