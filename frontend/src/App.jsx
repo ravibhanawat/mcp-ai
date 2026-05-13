@@ -4,7 +4,7 @@ import ReportWidget from './ReportWidget'
 import { AbapReviewWidget, AbapCodeWidget } from './AbapWidget'
 import ReceiptWidget from './ReceiptWidget'
 
-const API = '/api'
+const API = import.meta.env.VITE_API_URL || '/api'
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
