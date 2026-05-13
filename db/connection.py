@@ -38,6 +38,12 @@ _logger = logging.getLogger("db.connection")
 
 def _conninfo() -> str:
     """Build a libpq-style connection string from env vars or defaults."""
+    # Priority 1: standard DATABASE_URL (Railway, Heroku, etc.)
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        return db_url
+
+    # Priority 2: individual DB_* variables
     host     = os.environ.get("DB_HOST",     "localhost")
     port     = int(os.environ.get("DB_PORT", "5432"))
     user     = os.environ.get("DB_USER",     "sap_agent")
