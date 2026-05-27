@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 /* ─── Reset ─────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -8,33 +10,43 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace;
 
   /* Background */
-  --bg:         #fafafa;
+  --bg:         #ffffff;
   --bg-card:    #ffffff;
   --bg-hover:   #f4f4f5;
-  --bg-subtle:  #f1f5f9;
+  --bg-subtle:  #fafafa;
+  --bg-primary:   var(--bg-card);
+  --bg-secondary: var(--bg-subtle);
+
+  /* Glassmorphism & Depth */
+  --c-glass-bg:      rgba(255, 255, 255, 0.7);
+  --c-glass-border:  rgba(228, 228, 231, 0.6);
+  --glass-blur:      blur(12px) saturate(180%);
+  --glow-accent:     0 0 0 3px rgba(9, 9, 11, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --glow-purple:     0 0 0 3px rgba(124, 58, 237, 0.12), 0 4px 12px rgba(0, 0, 0, 0.03);
 
   /* Border */
   --border:        #e4e4e7;
   --border-strong: #d4d4d8;
 
   /* Text */
-  --text-primary:   #18181b;
+  --text-primary:   #09090b;
   --text-secondary: #71717a;
   --text-muted:     #a1a1aa;
 
-  /* Sidebar — dark */
-  --sb-bg:          #09090b;
-  --sb-border:      #27272a;
-  --sb-text:        #a1a1aa;
-  --sb-text-hover:  #e4e4e7;
-  --sb-text-active: #ffffff;
-  --sb-active-bg:   #27272a;
-  --sb-section:     #52525b;
+  /* Sidebar — light */
+  --sb-bg:          #fafafa;
+  --sb-border:      #e4e4e7;
+  --sb-text:        #71717a;
+  --sb-text-hover:  #09090b;
+  --sb-text-active: #09090b;
+  --sb-active-bg:   #f4f4f5;
+  --sb-section:     #a1a1aa;
 
-  /* Topbar — dark */
-  --tb-bg:     #09090b;
-  --tb-border: #27272a;
-  --tb-text:   #f4f4f5;
+
+  /* Topbar — light */
+  --tb-bg:     #ffffff;
+  --tb-border: #e4e4e7;
+  --tb-text:   #09090b;
 
   /* Accent (SAP Blue) */
   --accent:       #0070D2;

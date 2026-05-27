@@ -1297,6 +1297,51 @@ function LoginScreen({ onLogin }) {
   )
 }
 
+function _parseClaudeExample(ex) {
+  const splitWords = [' for ', ' on ', ' about ', ' to ', ' of ', ' with ', ' in ']
+  let title = ex
+  let subtitle = ''
+  
+  for (const word of splitWords) {
+    if (ex.includes(word)) {
+      const parts = ex.split(word)
+      title = parts[0]
+      subtitle = word.trim() + ' ' + parts.slice(1).join(word)
+      break
+    }
+  }
+
+  if (!subtitle) {
+    const words = ex.split(' ')
+    if (words.length > 3) {
+      title = words.slice(0, 3).join(' ')
+      subtitle = words.slice(3).join(' ')
+    } else {
+      title = ex
+      subtitle = 'Ask or query directly'
+    }
+  }
+
+  return { title, subtitle }
+}
+
+function _getExampleIcon(ex, currentModule) {
+  const lower = ex.toLowerCase()
+  let iconId = currentModule?.iconId || 'grid'
+  
+  if (lower.includes('code') || lower.includes('abap') || lower.includes('transport') || lower.includes('develop')) {
+    iconId = 'code'
+  } else if (lower.includes('report') || lower.includes('utilization') || lower.includes('capacity') || lower.includes('chart') || lower.includes('metrics')) {
+    iconId = 'grid'
+  } else if (lower.includes('document') || lower.includes('bill') || lower.includes('order') || lower.includes('vendor') || lower.includes('material')) {
+    iconId = 'package'
+  } else if (lower.includes('dollar') || lower.includes('cost') || lower.includes('ledger') || lower.includes('gl')) {
+    iconId = 'dollar'
+  }
+  
+  return iconId
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 function _relativeDate(iso) {
@@ -1316,43 +1361,47 @@ function Sidebar({ activeModule, onModuleClick, onReset, sapMode, allowedModules
   const modeLabel = { mock: '🎭 Mock mode', cloud: '☁️ SAP Cloud', on_premise: '🏢 On-Premise' }[sapMode] || sapMode
   return (
     <div className="sidebar">
-      <div className="sidebar-section-label">SAP Modules</div>
-      <nav className="sidebar-nav">
-        {visible.map(mod => (
-          <button key={mod.id} className={`mod-btn ${activeModule === mod.id ? 'active' : ''}`} onClick={() => onModuleClick(mod.id)}>
-            <span className="mod-icon"><ModuleIcon iconId={mod.iconId} color={mod.color} size={14} /></span>
-            <span className="mod-label">
-              <span className="mod-name">{mod.name}</span>
-              <span className="mod-desc">{mod.desc}</span>
-            </span>
-          </button>
-        ))}
-      </nav>
+      <div className="sidebar-section-label">SAP Module</div>
+      <div className="sidebar-module-select-wrap">
+        <select
+          className="sidebar-module-select"
+          value={activeModule}
+          onChange={e => onModuleClick(e.target.value)}
+        >
+          {visible.map(mod => (
+            <option key={mod.id} value={mod.id}>
+              {mod.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {conversations.length > 0 && (
-        <>
-          <div className="sidebar-section-label">Chat History</div>
-          <div className="history-list">
-            {conversations.map(c => (
-              <div key={c.session_id}
-                className={`history-item ${c.session_id === sessionId ? 'active' : ''}`}
-                onClick={() => onLoadConversation(c.session_id)}>
-                <div className="history-item-body">
-                  <span className="history-item-title">{c.title || 'Untitled'}</span>
-                  <span className="history-item-date">{_relativeDate(c.updated_at)}</span>
-                </div>
-                <button className="history-del-btn" title="Delete"
-                  onClick={e => { e.stopPropagation(); onDeleteConversation(c.session_id) }}>
-                  <Icons.trash />
-                </button>
-              </div>
-            ))}
+      <div className="sidebar-history-header">
+        <span className="sidebar-section-label" style={{ padding: 0 }}>Chat history</span>
+        <button className="compact-new-chat-btn" onClick={onNewChat}>+ New</button>
+      </div>
+      <button className="sidebar-refresh-btn" onClick={() => window.location.reload()}>Refresh</button>
+
+      <div className="history-list">
+        {conversations.map(c => (
+          <div key={c.session_id}
+            className={`history-item ${c.session_id === sessionId ? 'active' : ''}`}
+            onClick={() => onLoadConversation(c.session_id)}>
+            <div className="history-item-body">
+              <span className="history-item-title">{c.title || 'Untitled'}</span>
+              <span className="history-item-subtitle">
+                {c.session_id ? c.session_id.slice(-10) : ''} · {c.msg_count || c.message_count || 2} msgs · {_relativeDate(c.updated_at)}
+              </span>
+            </div>
+            <button className="history-del-btn" title="Delete"
+              onClick={e => { e.stopPropagation(); onDeleteConversation(c.session_id) }}>
+              <Icons.trash />
+            </button>
           </div>
-        </>
-      )}
+        ))}
+      </div>
 
       <div className="sidebar-footer">
-        <button className="new-chat-btn" onClick={onNewChat}>+ New Chat</button>
         <div className="sidebar-mode-label">{modeLabel}</div>
         <button className="clear-btn" onClick={onReset}>
           <Icons.trash /> Clear Conversation
@@ -1806,16 +1855,53 @@ export default function App() {
         {/* Chat */}
         <div className="chat-area">
           {showExamples ? (
-            <div className="welcome-panel">
-              <div className="welcome-icon">
-                <ModuleIcon iconId={currentModule.iconId} color={currentModule.color} size={26} />
-              </div>
-              <h2 className="welcome-title">Ask anything about {currentModule.name}</h2>
-              <p className="welcome-sub">{currentModule.desc} — select an example or type your own query below</p>
-              <div className="examples-grid">
-                {currentModule.examples.map((ex, i) => (
-                  <button key={i} className="example-card" onClick={() => sendMessage(ex)}>{ex}</button>
-                ))}
+            <div className="welcome-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '40px 20px' }}>
+              <div className="options-card">
+                <div className="options-card-header">
+                  <span className="options-card-title">What would you like help with today?</span>
+                  <button className="options-card-close" onClick={() => setViewMode('conversation')} title="Dismiss">✕</button>
+                </div>
+                <div className="options-card-list">
+                  {currentModule.examples.map((ex, i) => (
+                    <div
+                      key={i}
+                      className="options-card-row"
+                      onClick={() => sendMessage(ex)}
+                    >
+                      <span className="options-card-num">{i + 1}</span>
+                      <span className="options-card-text">{ex}</span>
+                      <span className="options-card-enter">↵</span>
+                    </div>
+                  ))}
+                  <div
+                    className="options-card-row"
+                    onClick={() => {
+                      inputRef.current?.focus()
+                    }}
+                  >
+                    <span className="options-card-num">{currentModule.examples.length + 1}</span>
+                    <span className="options-card-text">Something else</span>
+                    <span className="options-card-enter">↵</span>
+                  </div>
+                </div>
+                <div className="options-card-footer">
+                  <div className="options-card-input-wrap">
+                    <span className="options-card-pencil-icon">✎</span>
+                    <input
+                      type="text"
+                      className="options-card-input-field"
+                      placeholder="Something else"
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && input.trim()) {
+                          sendMessage(input)
+                        }
+                      }}
+                    />
+                  </div>
+                  <button className="options-card-skip-btn" onClick={() => setViewMode('conversation')}>Skip</button>
+                </div>
               </div>
             </div>
           ) : (
@@ -1829,14 +1915,6 @@ export default function App() {
 
           {/* Input bar */}
           <div className="input-bar">
-            <div className="input-controls">
-              <select className="model-select" value={model} onChange={e => setModel(e.target.value)} disabled={researchMode} title="Select LLM model">
-                {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <button className={`research-btn ${researchMode ? 'on' : ''}`} onClick={() => setResearchMode(r => !r)} title="Toggle Auto Research — chains multiple SAP tools automatically">
-                <Icons.beaker />{researchMode ? 'Research ON' : 'Research'}
-              </button>
-            </div>
             <div className="input-wrap">
               <textarea
                 ref={inputRef}
@@ -1853,15 +1931,34 @@ export default function App() {
                 }
                 disabled={loading}
               />
-              <button
-                className={`send-btn ${researchMode ? 'research-mode' : ''}`}
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim() || loading}
-                title="Send"
-              >
-                {loading ? <div className="spinner" /> : <Icons.send />}
-              </button>
+              <div className="chat-input-controls">
+                <select
+                  className="model-select-compact"
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  disabled={researchMode}
+                  title="Select LLM model"
+                >
+                  {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <button
+                  className={`research-btn-compact ${researchMode ? 'on' : ''}`}
+                  onClick={() => setResearchMode(r => !r)}
+                  title="Toggle Auto Research — chains multiple SAP tools automatically"
+                >
+                  <Icons.beaker />
+                </button>
+                <button
+                  className="send-btn-compact"
+                  onClick={() => sendMessage(input)}
+                  disabled={!input.trim() || loading}
+                  title="Send"
+                >
+                  {loading ? <div className="spinner dark" /> : <Icons.send />}
+                </button>
+              </div>
             </div>
+            <div className="input-footer">SAP AI Agent can make mistakes. Verify important results.</div>
           </div>
         </div>
       </div>
