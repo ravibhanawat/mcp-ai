@@ -474,6 +474,511 @@ function DataTable({ columns, rows, total, loading }) {
   )
 }
 
+// ─── InlineTableHeader ───────────────────────────────────────────────────────
+// Wraps DataTable with a header bar showing record count + action buttons.
+
+function InlineTableHeader({ tableData, onViewData, onVisualizeData, userQuery, loading }) {
+  const count = tableData?.total ?? tableData?.rows?.length ?? 0
+  const title = (userQuery || '').slice(0, 60) || 'Data'
+  const canAct = !loading && tableData?.rows?.length > 0
+
+  return (
+    <div className="inline-table-header">
+      <div className="inline-table-bar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect width="18" height="18" x="3" y="3" rx="2" />
+          <path d="M3 9h18" /><path d="M9 21V9" />
+        </svg>
+        <span className="inline-table-bar-count">
+          {loading ? `Loading… ${tableData?.rows?.length ?? 0} rows` : `${count} record${count !== 1 ? 's' : ''}`}
+        </span>
+        {canAct && onViewData && (
+          <button className="btn-ghost" onClick={() => onViewData(tableData, title)}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            </svg>
+            View Larger
+          </button>
+        )}
+        {canAct && onVisualizeData && (
+          <button className="btn-ghost" onClick={() => onVisualizeData(tableData, title)}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            Visualize
+          </button>
+        )}
+      </div>
+      <DataTable
+        columns={tableData.columns}
+        rows={tableData.rows}
+        total={tableData.total}
+        loading={loading}
+      />
+    </div>
+  )
+}
+
+// ─── getNumericColumns Helper ──────────────────────────────────────────────────
+
+function getNumericColumns(columns, rows) {
+  if (!rows || rows.length === 0) return []
+  return columns.filter(col => {
+    return rows.some(row => {
+      const val = row[col]
+      if (val === null || val === undefined || val === '') return false
+      const parsed = parseFloat(String(val).replace(/[$,%]/g, '').trim())
+      return !isNaN(parsed)
+    })
+  })
+}
+
+const polarToCartesian = (centerX, centerY, radius, angleInDegrees) => {
+  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0
+  return {
+    x: centerX + (radius * Math.cos(angleInRadians)),
+    y: centerY + (radius * Math.sin(angleInRadians))
+  }
+}
+
+const getArcPath = (x, y, radius, startAngle, endAngle) => {
+  const start = polarToCartesian(x, y, radius, endAngle)
+  const end = polarToCartesian(x, y, radius, startAngle)
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1"
+  return [
+    "M", x, y,
+    "L", start.x, start.y,
+    "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y,
+    "Z"
+  ].join(" ")
+}
+
+// ─── DataVisualizer Component ───────────────────────────────────────────────
+
+function DataVisualizer({ columns, rows }) {
+  const [xCol, setXCol] = useState('')
+  const [yCol, setYCol] = useState('')
+  const [chartType, setChartType] = useState('bar')
+  const [hoveredIdx, setHoveredIdx] = useState(null)
+  
+  const numericCols = getNumericColumns(columns, rows)
+  
+  useEffect(() => {
+    if (columns.length > 0) {
+      const firstNonNum = columns.find(c => !numericCols.includes(c)) || columns[0]
+      setXCol(firstNonNum)
+    }
+    if (numericCols.length > 0) {
+      setYCol(numericCols[0])
+    }
+  }, [columns, numericCols])
+
+  if (!rows || rows.length === 0) return <div className="chart-empty">No rows to visualize</div>
+  if (numericCols.length === 0) return <div className="chart-empty">No numeric columns found for visualization</div>
+
+  const getVal = (r, col) => {
+    if (!r || !col) return 0
+    const raw = r[col]
+    if (raw === null || raw === undefined) return 0
+    const val = parseFloat(String(raw).replace(/[$,%]/g, '').trim())
+    return isNaN(val) ? 0 : val
+  }
+
+  let chartData = rows.map((r, i) => ({
+    label: String(r[xCol] || `Item ${i + 1}`),
+    value: getVal(r, yCol),
+    raw: r
+  }))
+
+  const hasNonZero = chartData.some(d => d.value > 0)
+  if (hasNonZero) {
+    chartData = chartData.filter(d => d.value > 0)
+  }
+
+  chartData.sort((a, b) => b.value - a.value)
+
+  const maxItems = 10
+  if (chartData.length > maxItems) {
+    const top = chartData.slice(0, maxItems - 1)
+    const other = chartData.slice(maxItems - 1)
+    const otherSum = other.reduce((sum, d) => sum + d.value, 0)
+    chartData = [
+      ...top,
+      { label: 'Other', value: otherSum, raw: null }
+    ]
+  }
+
+  const maxValue = Math.max(...chartData.map(d => d.value), 1)
+  const sumValues = chartData.reduce((sum, d) => sum + d.value, 0)
+
+  const width = 640
+  const height = 360
+  const pad = { top: 40, right: 200, bottom: 60, left: 60 }
+  const chartW = width - pad.left - pad.right
+  const chartH = height - pad.top - pad.bottom
+
+  const colors = [
+    '#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4',
+    '#6366F1', '#EF4444', '#14B8A6', '#84CC16', '#F43F5E', '#A855F7'
+  ]
+
+  const gridTicks = [0, 0.25, 0.5, 0.75, 1]
+
+  const renderChart = () => {
+    if (chartType === 'bar') {
+      const barW = (chartW / chartData.length) * 0.65
+      const barGap = (chartW / chartData.length) * 0.35
+      return (
+        <g>
+          {gridTicks.map((tick, idx) => {
+            const y = pad.top + chartH * (1 - tick)
+            return (
+              <g key={idx}>
+                <line x1={pad.left} y1={y} x2={pad.left + chartW} y2={y} stroke="var(--border)" strokeDasharray="3 3" strokeWidth="1" />
+                <text x={pad.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">
+                  {Math.round(tick * maxValue).toLocaleString()}
+                </text>
+              </g>
+            )
+          })}
+          {chartData.map((d, i) => {
+            const h = (d.value / maxValue) * chartH
+            const x = pad.left + i * (barW + barGap) + barGap / 2
+            const y = pad.top + chartH - h
+            const isHovered = hoveredIdx === i
+            const color = colors[i % colors.length]
+            return (
+              <g key={i} onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)} style={{ cursor: 'pointer' }}>
+                <rect 
+                  x={x} 
+                  y={y} 
+                  width={barW} 
+                  height={Math.max(h, 2)} 
+                  fill={color} 
+                  opacity={isHovered ? 0.95 : 0.8}
+                  rx="4"
+                  style={{ transition: 'all 0.15s ease' }}
+                />
+                {(isHovered || chartData.length <= 8) && (
+                  <text 
+                    x={x + barW / 2} 
+                    y={y - 6} 
+                    textAnchor="middle" 
+                    fontSize="10" 
+                    fontWeight="600" 
+                    fill="var(--text-primary)"
+                  >
+                    {d.value.toLocaleString()}
+                  </text>
+                )}
+                <text 
+                  x={x + barW / 2} 
+                  y={pad.top + chartH + 16} 
+                  textAnchor="middle" 
+                  fontSize="9.5" 
+                  fill="var(--text-secondary)"
+                  transform={`rotate(15, ${x + barW / 2}, ${pad.top + chartH + 16})`}
+                >
+                  {d.label.length > 10 ? d.label.slice(0, 10) + '..' : d.label}
+                </text>
+              </g>
+            )
+          })}
+          <line x1={pad.left} y1={pad.top + chartH} x2={pad.left + chartW} y2={pad.top + chartH} stroke="var(--border)" strokeWidth="1" />
+        </g>
+      )
+    }
+
+    if (chartType === 'line') {
+      const ptCount = chartData.length
+      const getPtX = (idx) => pad.left + (ptCount > 1 ? idx * (chartW / (ptCount - 1)) : chartW / 2)
+      const getPtY = (idx) => pad.top + chartH - (chartData[idx].value / maxValue) * chartH
+
+      const points = chartData.map((d, idx) => ({ x: getPtX(idx), y: getPtY(idx) }))
+      let pathD = ''
+      if (points.length > 0) {
+        pathD = `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
+      }
+      
+      const areaPathD = points.length > 0 
+        ? `${pathD} L ${points[points.length - 1].x} ${pad.top + chartH} L ${points[0].x} ${pad.top + chartH} Z`
+        : ''
+
+      return (
+        <g>
+          {gridTicks.map((tick, idx) => {
+            const y = pad.top + chartH * (1 - tick)
+            return (
+              <g key={idx}>
+                <line x1={pad.left} y1={y} x2={pad.left + chartW} y2={y} stroke="var(--border)" strokeDasharray="3 3" strokeWidth="1" />
+                <text x={pad.left - 8} y={y + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)">
+                  {Math.round(tick * maxValue).toLocaleString()}
+                </text>
+              </g>
+            )
+          })}
+          
+          {areaPathD && (
+            <path d={areaPathD} fill="url(#line-grad)" opacity="0.1" />
+          )}
+
+          {pathD && (
+            <path d={pathD} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          )}
+
+          {points.map((pt, idx) => {
+            const isHovered = hoveredIdx === idx
+            return (
+              <g 
+                key={idx} 
+                onMouseEnter={() => setHoveredIdx(idx)} 
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                <circle 
+                  cx={pt.x} 
+                  cy={pt.y} 
+                  r={isHovered ? 6 : 4} 
+                  fill="var(--accent)" 
+                  stroke="var(--bg-card)" 
+                  strokeWidth="2" 
+                  style={{ transition: 'all 0.15s ease' }}
+                />
+                {(isHovered || ptCount <= 8) && (
+                  <text 
+                    x={pt.x} 
+                    y={pt.y - 10} 
+                    textAnchor="middle" 
+                    fontSize="10" 
+                    fontWeight="600" 
+                    fill="var(--text-primary)"
+                  >
+                    {chartData[idx].value.toLocaleString()}
+                  </text>
+                )}
+                <text 
+                  x={pt.x} 
+                  y={pad.top + chartH + 16} 
+                  textAnchor="middle" 
+                  fontSize="9.5" 
+                  fill="var(--text-secondary)"
+                  transform={`rotate(15, ${pt.x}, ${pad.top + chartH + 16})`}
+                >
+                  {chartData[idx].label.length > 10 ? chartData[idx].label.slice(0, 10) + '..' : chartData[idx].label}
+                </text>
+              </g>
+            )
+          })}
+          <line x1={pad.left} y1={pad.top + chartH} x2={pad.left + chartW} y2={pad.top + chartH} stroke="var(--border)" strokeWidth="1" />
+        </g>
+      )
+    }
+
+    if (chartType === 'pie' || chartType === 'donut') {
+      const centerX = pad.left + chartW / 2
+      const centerY = pad.top + chartH / 2
+      const radius = Math.min(chartW, chartH) / 2 * 0.95
+      
+      let accumulatedAngle = 0
+      
+      return (
+        <g>
+          {sumValues === 0 ? (
+            <text x={centerX} y={centerY} textAnchor="middle" fill="var(--text-muted)">No data value</text>
+          ) : (
+            chartData.map((d, i) => {
+              const pct = d.value / sumValues
+              const angleSize = pct * 360
+              const startAngle = accumulatedAngle
+              const endAngle = accumulatedAngle + angleSize
+              accumulatedAngle = endAngle
+
+              const pathD = getArcPath(centerX, centerY, radius, startAngle, endAngle)
+              const isHovered = hoveredIdx === i
+              const color = colors[i % colors.length]
+
+              const midAngle = startAngle + angleSize / 2
+              const centroidRad = radius * (chartType === 'donut' ? 0.72 : 0.6)
+              const centroid = polarToCartesian(centerX, centerY, centroidRad, midAngle)
+
+              return (
+                <g 
+                  key={i} 
+                  onMouseEnter={() => setHoveredIdx(i)} 
+                  onMouseLeave={() => setHoveredIdx(null)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <path 
+                    d={pathD} 
+                    fill={color} 
+                    opacity={isHovered ? 0.95 : 0.8}
+                    stroke="var(--bg-card)"
+                    strokeWidth="1.5"
+                    style={{ transition: 'all 0.15s ease' }}
+                  />
+                  {pct > 0.05 && (
+                    <text 
+                      x={centroid.x} 
+                      y={centroid.y + 4} 
+                      textAnchor="middle" 
+                      fontSize="9" 
+                      fontWeight="600" 
+                      fill="#ffffff"
+                    >
+                      {Math.round(pct * 100)}%
+                    </text>
+                  )}
+                </g>
+              )
+            })
+          )}
+          {chartType === 'donut' && (
+            <circle cx={centerX} cy={centerY} r={radius * 0.55} fill="var(--bg-card)" stroke="var(--border)" strokeWidth="0.5" />
+          )}
+        </g>
+      )
+    }
+  }
+
+  return (
+    <div className="visualizer-container">
+      <div className="visualizer-config">
+        <div className="vis-config-group">
+          <label className="vis-label">Chart Type</label>
+          <div className="vis-tabs">
+            {['bar', 'line', 'pie', 'donut'].map(type => (
+              <button 
+                key={type} 
+                className={`vis-tab ${chartType === type ? 'active' : ''}`}
+                onClick={() => setChartType(type)}
+              >
+                {type.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="vis-config-fields">
+          <div className="vis-field">
+            <label className="vis-label">X-Axis Label</label>
+            <select className="form-select vis-select" value={xCol} onChange={e => setXCol(e.target.value)}>
+              {columns.map(col => <option key={col} value={col}>{col.replace(/_/g, ' ').toUpperCase()}</option>)}
+            </select>
+          </div>
+          <div className="vis-field">
+            <label className="vis-label">Y-Axis Metric</label>
+            <select className="form-select vis-select" value={yCol} onChange={e => setYCol(e.target.value)}>
+              {numericCols.map(col => <option key={col} value={col}>{col.replace(/_/g, ' ').toUpperCase()}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="visualizer-content">
+        <div className="visualizer-chart-wrap">
+          <svg width={width} height={height} className="visualizer-svg">
+            <defs>
+              <linearGradient id="line-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.4"/>
+                <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.0"/>
+              </linearGradient>
+            </defs>
+            {renderChart()}
+          </svg>
+        </div>
+
+        <div className="visualizer-legend">
+          <span className="legend-title">{yCol.replace(/_/g, ' ').toUpperCase()} Distribution</span>
+          <div className="legend-list">
+            {chartData.map((d, i) => {
+              const color = colors[i % colors.length]
+              const pct = sumValues > 0 ? ((d.value / sumValues) * 100).toFixed(1) : '0'
+              const isHovered = hoveredIdx === i
+              return (
+                <div 
+                  key={i} 
+                  className={`legend-item ${isHovered ? 'hovered' : ''}`}
+                  onMouseEnter={() => setHoveredIdx(i)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                >
+                  <span className="legend-bullet" style={{ background: color }} />
+                  <span className="legend-name" title={d.label}>{d.label}</span>
+                  <span className="legend-val">
+                    <strong>{d.value.toLocaleString()}</strong> 
+                    <span className="legend-pct">({pct}%)</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── DataViewModal Component ───────────────────────────────────────────────
+
+function DataViewModal({ isOpen, onClose, data, activeTab, onTabChange }) {
+  if (!isOpen || !data) return null
+  
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal data-view-modal">
+        <div className="modal-head">
+          <span className="modal-title">{data.title || 'Data View'}</span>
+          <button className="modal-close" onClick={onClose}><Icons.x /></button>
+        </div>
+        
+        <div className="modal-tabs">
+          <button 
+            className={`modal-tab ${activeTab === 'table' ? 'active' : ''}`} 
+            onClick={() => onTabChange('table')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M3 9h18" />
+              <path d="M9 21V9" />
+            </svg>
+            Table View
+          </button>
+          <button 
+            className={`modal-tab ${activeTab === 'chart' ? 'active' : ''}`} 
+            onClick={() => onTabChange('chart')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+            Chart Visualization
+          </button>
+        </div>
+        
+        <div className="modal-body data-view-modal-body">
+          {activeTab === 'table' ? (
+            <DataTable 
+              columns={data.columns}
+              rows={data.rows}
+              total={data.total}
+              loading={false}
+            />
+          ) : (
+            <DataVisualizer 
+              columns={data.columns}
+              rows={data.rows}
+            />
+          )}
+        </div>
+        
+        <div className="modal-foot">
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── SapSourceBadge ──────────────────────────────────────────────────────────
 
 function SapSourceBadge({ source }) {
@@ -642,9 +1147,477 @@ function MessageRow({ msg }) {
         {msg.tool_result && (msg.tool_result.outstanding_items || msg.tool_result.park_reference) && (
           <ReceiptWidget initialData={msg.tool_result.outstanding_items ? msg.tool_result : null} />
         )}
+        {(msg.tool_called === "autonomous_agent" || msg.tool_called === "action_plan" || msg.action_plan) && (
+          <Plan planData={msg.action_plan} />
+        )}
       </div>
     </div>
   )
+}
+
+// ─── Plan Icons ──────────────────────────────────────────────────────────────
+
+function PlanCheckIcon({ size = "h-4.5 w-4.5" }) {
+  return (
+    <svg className={`${size} text-green-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  )
+}
+
+function PlanProgressIcon({ size = "h-4.5 w-4.5" }) {
+  return (
+    <svg className={`${size} text-blue-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', animation: 'spin 3s linear infinite' }}>
+      <path d="M10.1 2.182a10 10 0 0 1 3.8 0" />
+      <path d="M13.9 21.818a10 10 0 0 1-3.8 0" />
+      <path d="M17.603 4.2a10 10 0 0 1 2.2 3.1" />
+      <path d="M4.197 19.8a10 10 0 0 1-2.2-3.1" />
+      <path d="M21.818 10.1a10 10 0 0 1 0 3.8" />
+      <path d="M2.182 13.9a10 10 0 0 1 0-3.8" />
+      <path d="M19.803 17.6a10 10 0 0 1-3.1 2.2" />
+      <path d="M4.197 6.4a10 10 0 0 1 3.1-2.2" />
+    </svg>
+  )
+}
+
+function PlanAlertIcon({ size = "h-4.5 w-4.5" }) {
+  return (
+    <svg className={`${size} text-yellow-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  )
+}
+
+function PlanFailedIcon({ size = "h-4.5 w-4.5" }) {
+  return (
+    <svg className={`${size} text-red-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  )
+}
+
+function PlanPendingIcon({ size = "h-4.5 w-4.5" }) {
+  return (
+    <svg className={`${size} text-muted-foreground`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', opacity: 0.6 }}>
+      <circle cx="12" cy="12" r="10" />
+    </svg>
+  )
+}
+
+// Initial task data for Plan component
+const initialTasks = [
+  {
+    id: "1",
+    title: "Research Project Requirements",
+    description: "Gather all necessary information about project scope and requirements",
+    status: "in-progress",
+    priority: "high",
+    level: 0,
+    dependencies: [],
+    subtasks: [
+      {
+        id: "1.1",
+        title: "Interview stakeholders",
+        description: "Conduct interviews with key stakeholders to understand needs",
+        status: "completed",
+        priority: "high",
+        tools: ["communication-agent", "meeting-scheduler"],
+      },
+      {
+        id: "1.2",
+        title: "Review existing documentation",
+        description: "Go through all available documentation and extract requirements",
+        status: "in-progress",
+        priority: "medium",
+        tools: ["file-system", "browser"],
+      },
+      {
+        id: "1.3",
+        title: "Compile findings report",
+        description: "Create a comprehensive report of all gathered information",
+        status: "need-help",
+        priority: "medium",
+        tools: ["file-system", "markdown-processor"],
+      },
+    ],
+  },
+  {
+    id: "2",
+    title: "Design System Architecture",
+    description: "Create the overall system architecture based on requirements",
+    status: "in-progress",
+    priority: "high",
+    level: 0,
+    dependencies: [],
+    subtasks: [
+      {
+        id: "2.1",
+        title: "Define component structure",
+        description: "Map out all required components and their interactions",
+        status: "pending",
+        priority: "high",
+        tools: ["architecture-planner", "diagramming-tool"],
+      },
+      {
+        id: "2.2",
+        title: "Create data flow diagrams",
+        description: "Design diagrams showing how data will flow through the system",
+        status: "pending",
+        priority: "medium",
+        tools: ["diagramming-tool", "file-system"],
+      },
+      {
+        id: "2.3",
+        title: "Document API specifications",
+        description: "Write detailed specifications for all APIs in the system",
+        status: "pending",
+        priority: "high",
+        tools: ["api-designer", "openapi-generator"],
+      },
+    ],
+  },
+  {
+    id: "3",
+    title: "Implementation Planning",
+    description: "Create a detailed plan for implementing the system",
+    status: "pending",
+    priority: "medium",
+    level: 1,
+    dependencies: ["1", "2"],
+    subtasks: [
+      {
+        id: "3.1",
+        title: "Resource allocation",
+        description: "Determine required resources and allocate them to tasks",
+        status: "pending",
+        priority: "medium",
+        tools: ["project-manager", "resource-calculator"],
+      },
+      {
+        id: "3.2",
+        title: "Timeline development",
+        description: "Create a timeline with milestones and deadlines",
+        status: "pending",
+        priority: "high",
+        tools: ["timeline-generator", "gantt-chart-creator"],
+      },
+      {
+        id: "3.3",
+        title: "Risk assessment",
+        description: "Identify potential risks and develop mitigation strategies",
+        status: "pending",
+        priority: "medium",
+        tools: ["risk-analyzer"],
+      },
+    ],
+  },
+  {
+    id: "4",
+    title: "Development Environment Setup",
+    description: "Set up all necessary tools and environments for development",
+    status: "in-progress",
+    priority: "high",
+    level: 0,
+    dependencies: [],
+    subtasks: [
+      {
+        id: "4.1",
+        title: "Install development tools",
+        description: "Set up IDEs, version control, and other necessary development tools",
+        status: "pending",
+        priority: "high",
+        tools: ["shell", "package-manager"],
+      },
+      {
+        id: "4.2",
+        title: "Configure CI/CD pipeline",
+        description: "Set up continuous integration and deployment pipelines",
+        status: "pending",
+        priority: "medium",
+        tools: ["github-actions", "gitlab-ci", "jenkins-connector"],
+      },
+      {
+        id: "4.3",
+        title: "Set up testing framework",
+        description: "Configure automated testing frameworks for the project",
+        status: "pending",
+        priority: "high",
+        tools: ["test-runner", "shell"],
+      },
+    ],
+  },
+  {
+    id: "5",
+    title: "Initial Development Sprint",
+    description: "Execute the first development sprint based on the plan",
+    status: "pending",
+    priority: "medium",
+    level: 1,
+    dependencies: ["4"],
+    subtasks: [
+      {
+        id: "5.1",
+        title: "Implement core features",
+        description: "Develop the essential features identified in the requirements",
+        status: "pending",
+        priority: "high",
+        tools: ["code-assistant", "github", "file-system", "shell"],
+      },
+      {
+        id: "5.2",
+        title: "Perform unit testing",
+        description: "Create and execute unit tests for implemented features",
+        status: "pending",
+        priority: "medium",
+        tools: ["test-runner", "code-coverage-analyzer"],
+      },
+      {
+        id: "5.3",
+        title: "Document code",
+        description: "Create documentation for the implemented code",
+        status: "pending",
+        priority: "low",
+        tools: ["documentation-generator", "markdown-processor"],
+      },
+    ],
+  },
+];
+
+function Plan({ planData }) {
+  const [tasks, setTasks] = useState(() => {
+    if (planData && Array.isArray(planData) && planData.length > 0) {
+      return planData;
+    }
+    return JSON.parse(JSON.stringify(initialTasks));
+  });
+
+  const [expandedTasks, setExpandedTasks] = useState(["1"]);
+  const [expandedSubtasks, setExpandedSubtasks] = useState({});
+
+  const toggleTaskExpansion = (taskId) => {
+    setExpandedTasks((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId]
+    );
+  };
+
+  const toggleSubtaskExpansion = (taskId, subtaskId) => {
+    const key = `${taskId}-${subtaskId}`;
+    setExpandedSubtasks((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const toggleTaskStatus = (taskId) => {
+    setTasks((prev) =>
+      prev.map((task) => {
+        if (task.id === taskId) {
+          const statuses = ["completed", "in-progress", "pending", "need-help", "failed"];
+          const currentIndex = Math.floor(Math.random() * statuses.length);
+          const newStatus = statuses[currentIndex];
+
+          const updatedSubtasks = task.subtasks.map((subtask) => ({
+            ...subtask,
+            status: newStatus === "completed" ? "completed" : subtask.status,
+          }));
+
+          return {
+            ...task,
+            status: newStatus,
+            subtasks: updatedSubtasks,
+          };
+        }
+        return task;
+      })
+    );
+  };
+
+  const toggleSubtaskStatus = (taskId, subtaskId) => {
+    setTasks((prev) =>
+      prev.map((task) => {
+        if (task.id === taskId) {
+          const updatedSubtasks = task.subtasks.map((subtask) => {
+            if (subtask.id === subtaskId) {
+              const newStatus =
+                subtask.status === "completed" ? "pending" : "completed";
+              return { ...subtask, status: newStatus };
+            }
+            return subtask;
+          });
+
+          const allSubtasksCompleted = updatedSubtasks.every(
+            (s) => s.status === "completed"
+          );
+
+          return {
+            ...task,
+            subtasks: updatedSubtasks,
+            status: allSubtasksCompleted ? "completed" : task.status,
+          };
+        }
+        return task;
+      })
+    );
+  };
+
+  return (
+    <div className="plan-container">
+      <div className="plan-card">
+        <ul className="plan-task-list">
+          {tasks.map((task, index) => {
+            const isExpanded = expandedTasks.includes(task.id);
+            const isCompleted = task.status === "completed";
+
+            return (
+              <li key={task.id} className="plan-task-item">
+                {/* Task row */}
+                <div 
+                  className="plan-task-row"
+                  onClick={() => toggleTaskExpansion(task.id)}
+                >
+                  <div
+                    className="plan-status-icon-wrap"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTaskStatus(task.id);
+                    }}
+                  >
+                    {task.status === "completed" ? (
+                      <PlanCheckIcon />
+                    ) : task.status === "in-progress" ? (
+                      <PlanProgressIcon />
+                    ) : task.status === "need-help" ? (
+                      <PlanAlertIcon />
+                    ) : task.status === "failed" ? (
+                      <PlanFailedIcon />
+                    ) : (
+                      <PlanPendingIcon />
+                    )}
+                  </div>
+
+                  <div className="plan-task-title-wrap">
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                      <span className={`plan-task-title ${isCompleted ? 'completed' : ''}`}>
+                        {task.title}
+                      </span>
+                    </div>
+
+                    <div className="plan-task-meta">
+                      {task.dependencies && task.dependencies.length > 0 && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {task.dependencies.map((dep, idx) => (
+                            <span key={idx} className="plan-dep-badge">
+                              {dep}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <span className={`plan-status-badge ${task.status}`}>
+                        {task.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subtasks connector and list */}
+                <div 
+                  className="plan-subtask-container"
+                  style={{
+                    maxHeight: isExpanded ? '1000px' : '0',
+                    opacity: isExpanded ? 1 : 0,
+                    pointerEvents: isExpanded ? 'auto' : 'none'
+                  }}
+                >
+                  {task.subtasks && task.subtasks.length > 0 && (
+                    <>
+                      <div className="plan-subtask-connector" />
+                      <ul className="plan-subtask-list">
+                        {task.subtasks.map((subtask) => {
+                          const subtaskKey = `${task.id}-${subtask.id}`;
+                          const isSubtaskExpanded = expandedSubtasks[subtaskKey];
+
+                          return (
+                            <li 
+                              key={subtask.id} 
+                              className="plan-subtask-item"
+                              onClick={() => toggleSubtaskExpansion(task.id, subtask.id)}
+                            >
+                              <div className="plan-subtask-row">
+                                <div
+                                  className="plan-status-icon-wrap"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSubtaskStatus(task.id, subtask.id);
+                                  }}
+                                >
+                                  {subtask.status === "completed" ? (
+                                    <PlanCheckIcon size="h-3.5 w-3.5" />
+                                  ) : subtask.status === "in-progress" ? (
+                                    <PlanProgressIcon size="h-3.5 w-3.5" />
+                                  ) : subtask.status === "need-help" ? (
+                                    <PlanAlertIcon size="h-3.5 w-3.5" />
+                                  ) : subtask.status === "failed" ? (
+                                    <PlanFailedIcon size="h-3.5 w-3.5" />
+                                  ) : (
+                                    <PlanPendingIcon size="h-3.5 w-3.5" />
+                                  )}
+                                </div>
+
+                                <span className={`plan-subtask-title ${subtask.status === "completed" ? "completed" : ""}`}>
+                                  {subtask.title}
+                                </span>
+                              </div>
+
+                              <div 
+                                className="plan-subtask-details"
+                                style={{
+                                  maxHeight: isSubtaskExpanded ? '200px' : '0',
+                                  opacity: isSubtaskExpanded ? 1 : 0,
+                                  pointerEvents: isSubtaskExpanded ? 'auto' : 'none'
+                                }}
+                              >
+                                <p style={{ padding: '4px 0' }}>{subtask.description}</p>
+                                {subtask.tools && subtask.tools.length > 0 && (
+                                  <div className="plan-tools-row">
+                                    <span className="plan-tools-label">MCP Servers:</span>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                      {subtask.tools.map((tool, idx) => (
+                                        <span key={idx} className="plan-tool-badge">
+                                          {tool}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ─── ShiningText ──────────────────────────────────────────────────────────────
+
+function ShiningText({ text }) {
+  return <span className="shining-text">{text}</span>
 }
 
 // ─── TypingIndicator ──────────────────────────────────────────────────────────
@@ -654,7 +1627,7 @@ function TypingIndicator() {
     <div className="typing-row">
       <div className="msg-avatar bot-av">AI</div>
       <div className="typing-bubble">
-        <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+        <ShiningText text="clavis is thinking..." />
       </div>
     </div>
   )
@@ -682,7 +1655,7 @@ function StreamingMessageRow({ msg }) {
           </div>
         ) : (
           <div className="stream-thinking">
-            <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+            <ShiningText text="clavis is thinking..." />
           </div>
         )}
         {msg.tableData && (
@@ -692,6 +1665,9 @@ function StreamingMessageRow({ msg }) {
             total={msg.tableData.total}
             loading={msg.tableData.loading}
           />
+        )}
+        {(msg.tool_called === "autonomous_agent" || msg.tool_called === "action_plan" || msg.action_plan) && (
+          <Plan planData={msg.action_plan} />
         )}
       </div>
     </div>
@@ -1248,52 +2224,236 @@ function SettingsModal({ onClose, currentUser }) {
 
 // ─── LoginScreen ──────────────────────────────────────────────────────────────
 
+function LoginCharSvg({ type = 'left', floatDelay = '0s' }) {
+  if (type === 'right') {
+    return (
+      <svg width="215" height="335" viewBox="0 0 215 335" fill="none">
+        {/* Card backdrop */}
+        <rect x="15" y="45" width="185" height="245" rx="16" fill="white" stroke="#DDD5C3" strokeWidth="1.5"/>
+        {/* Header label */}
+        <rect x="30" y="62" width="55" height="8" rx="4" fill="#0070D2" fillOpacity="0.2"/>
+        <rect x="30" y="78" width="105" height="6" rx="3" fill="#f4f4f5"/>
+        {/* Status badges */}
+        <rect x="30" y="94" width="40" height="12" rx="4" fill="#10b981" fillOpacity="0.1"/>
+        <circle cx="36" cy="100" r="3" fill="#10b981"/>
+        <rect x="44" y="97" width="20" height="6" rx="2" fill="#10b981" fillOpacity="0.3"/>
+        <rect x="76" y="94" width="40" height="12" rx="4" fill="#ef4444" fillOpacity="0.1"/>
+        <circle cx="82" cy="100" r="3" fill="#ef4444"/>
+        <rect x="90" y="97" width="20" height="6" rx="2" fill="#ef4444" fillOpacity="0.3"/>
+        {/* Floating bar chart card */}
+        <g style={{ animation: `lgFloat 3.8s ease-in-out infinite ${floatDelay}` }}>
+          <rect x="26" y="120" width="163" height="75" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
+          <rect x="38" y="130" width="45" height="6" rx="3" fill="#e4e4e7"/>
+          <line x1="38" y1="178" x2="177" y2="178" stroke="#e4e4e7" strokeWidth="1.5"/>
+          <rect x="44" y="152" width="12" height="26" rx="1.5" fill="#0070D2"/>
+          <rect x="62" y="142" width="12" height="36" rx="1.5" fill="#3b82f6"/>
+          <rect x="80" y="136" width="12" height="42" rx="1.5" fill="#C89B3C"/>
+          <rect x="98" y="148" width="12" height="30" rx="1.5" fill="#ef4444"/>
+          <rect x="116" y="140" width="12" height="38" rx="1.5" fill="#10b981"/>
+          <rect x="134" y="154" width="12" height="24" rx="1.5" fill="#a855f7"/>
+          <rect x="152" y="146" width="12" height="32" rx="1.5" fill="#e2e8f0"/>
+        </g>
+        {/* Floating line chart card */}
+        <g style={{ animation: `lgFloat 4.2s ease-in-out infinite 0.4s` }}>
+          <rect x="26" y="208" width="163" height="70" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
+          <path d="M42,262 Q72,224 102,250 T162,228" stroke="#0070D2" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+          <circle cx="42" cy="262" r="3" fill="#0070D2"/>
+          <circle cx="102" cy="250" r="3" fill="#C89B3C"/>
+          <circle cx="162" cy="228" r="3" fill="#10b981"/>
+          <circle cx="102" cy="250" r="10" fill="#C89B3C" fillOpacity="0.08" stroke="#C89B3C" strokeWidth="1" strokeDasharray="2 2"/>
+        </g>
+      </svg>
+    )
+  }
+
+  // Left illustration: Natural Language Query Interface
+  return (
+    <svg width="215" height="335" viewBox="0 0 215 335" fill="none">
+      {/* Card backdrop */}
+      <rect x="15" y="45" width="185" height="245" rx="16" fill="white" stroke="#DDD5C3" strokeWidth="1.5"/>
+      {/* Header */}
+      <rect x="30" y="62" width="50" height="8" rx="4" fill="#C89B3C" fillOpacity="0.35"/>
+      <rect x="30" y="78" width="110" height="6" rx="3" fill="#f4f4f5"/>
+      {/* Online status */}
+      <circle cx="36" cy="97" r="3.5" fill="#10b981"/>
+      <rect x="44" y="94" width="50" height="6" rx="3" fill="#f4f4f5"/>
+
+      {/* Floating user query bubble */}
+      <g style={{ animation: `lgFloat 3.8s ease-in-out infinite ${floatDelay}` }}>
+        <rect x="26" y="112" width="163" height="62" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
+        {/* User avatar */}
+        <circle cx="44" cy="132" r="9" fill="#1B3254"/>
+        <rect x="39" y="129" width="10" height="6" rx="2" fill="white" fillOpacity="0.7"/>
+        {/* Query text lines */}
+        <rect x="60" y="126" width="115" height="6" rx="3" fill="#e4e4e7"/>
+        <rect x="60" y="137" width="88" height="6" rx="3" fill="#e4e4e7"/>
+        {/* Send arrow badge */}
+        <rect x="155" y="148" width="22" height="16" rx="6" fill="#C89B3C"/>
+        <path d="M162,156 L170,156 M167,153 L170,156 L167,159" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </g>
+
+      {/* Floating AI response card */}
+      <g style={{ animation: `lgFloat 4.3s ease-in-out infinite 0.5s` }}>
+        <rect x="26" y="188" width="163" height="90" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
+        {/* AI label */}
+        <rect x="38" y="200" width="28" height="10" rx="4" fill="#1B3254" fillOpacity="0.9"/>
+        <rect x="44" y="203" width="16" height="4" rx="1.5" fill="white" fillOpacity="0.7"/>
+        {/* Result rows */}
+        <rect x="38" y="218" width="130" height="5" rx="2" fill="#f4f4f5"/>
+        <rect x="38" y="228" width="108" height="5" rx="2" fill="#f4f4f5"/>
+        <rect x="38" y="238" width="120" height="5" rx="2" fill="#f4f4f5"/>
+        <rect x="38" y="248" width="95" height="5" rx="2" fill="#f4f4f5"/>
+        {/* Status chips */}
+        <rect x="38" y="260" width="36" height="11" rx="4" fill="#10b981" fillOpacity="0.12"/>
+        <circle cx="45" cy="265.5" r="2.5" fill="#10b981"/>
+        <rect x="50" y="263" width="18" height="5" rx="1.5" fill="#10b981" fillOpacity="0.4"/>
+        <rect x="80" y="260" width="36" height="11" rx="4" fill="#C89B3C" fillOpacity="0.12"/>
+        <circle cx="87" cy="265.5" r="2.5" fill="#C89B3C"/>
+        <rect x="92" y="263" width="18" height="5" rx="1.5" fill="#C89B3C" fillOpacity="0.4"/>
+      </g>
+    </svg>
+  )
+}
+
 function LoginScreen({ onLogin }) {
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPw, setShowPw] = useState(false)
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setLoading(true); setError('')
+    e.preventDefault()
+    setLoading(true)
+    setError('')
     try {
-      const res = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, password }) })
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, password }),
+      })
       const data = await res.json()
       if (!res.ok) { setError(data.detail || 'Invalid credentials'); return }
       onLogin(data)
-    } catch { setError('Cannot connect to server. Is the API running on port 8000?') }
-    finally { setLoading(false) }
+    } catch {
+      setError('Cannot connect to server. Is the API running on port 8000?')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-logo-wrap"><div className="login-logo">SAP</div></div>
-        <h2 className="login-title">SAP AI Agent</h2>
-        <p className="login-subtitle">Natural Language ERP Interface</p>
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label className="form-label">User ID</label>
-            <input className="form-input" value={userId} onChange={e => setUserId(e.target.value)} placeholder="admin" autoFocus autoComplete="username" />
+    <>
+      <style>{`
+        @keyframes lgFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+        @keyframes lgFadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+        .lg-page{min-height:100vh;background:#EDE8DC;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+        .lg-layout{display:flex;align-items:center;justify-content:center;width:100%;max-width:940px;padding:40px 16px;box-sizing:border-box}
+        .lg-char{flex:0 0 215px;display:flex;justify-content:center;align-items:center}
+        .lg-char-r{transform:scaleX(-1)}
+        .lg-card{flex:0 1 430px;background:white;border-radius:22px;padding:46px 48px;box-shadow:0 16px 64px rgba(0,0,0,0.08),0 2px 8px rgba(0,0,0,0.04);animation:lgFadeUp 0.65s ease forwards;position:relative;z-index:1;box-sizing:border-box}
+        .lg-logo-wrap{display:flex;justify-content:center;margin-bottom:18px}
+        .lg-title{margin:0;font-size:28px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px;font-family:var(--font-sans);text-align:center}
+        .lg-sub{margin:8px 0 0;font-size:10px;color:#AEAEAE;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-sans);text-align:center}
+        .lg-form{display:flex;flex-direction:column;gap:14px;margin-top:32px}
+        .lg-input{width:100%;border:1.5px solid #EAE2D4;border-radius:10px;padding:14px 16px;font-size:14px;outline:none;background:#FDFCFA;color:#2d2d2d;box-sizing:border-box;transition:border-color 0.2s,box-shadow 0.2s;font-family:var(--font-sans)}
+        .lg-input:focus{border-color:#1a1a1a;box-shadow:0 0 0 3px rgba(26,26,26,0.06);background:white}
+        .lg-input::placeholder{color:#C0B5A2;font-style:italic;font-size:13.5px}
+        .lg-pw-wrap{position:relative}
+        .lg-pw-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#999;font-size:12px;font-family:var(--font-sans);padding:2px 4px;letter-spacing:0.5px;line-height:1}
+        .lg-pw-toggle:hover{color:#333}
+        .lg-btn{width:100%;background:#1a1a1a;color:white;border:none;border-radius:11px;padding:16px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px;letter-spacing:0.3px;transition:background 0.2s,transform 0.1s;font-family:var(--font-sans)}
+        .lg-btn:hover:not(:disabled){background:#2c2c2c}
+        .lg-btn:active:not(:disabled){transform:scale(0.99)}
+        .lg-btn:disabled{opacity:0.42;cursor:not-allowed}
+        .lg-error{color:#dc2626;font-size:12.5px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-family:var(--font-sans)}
+        .lg-demo{margin-top:26px;text-align:center}
+        .lg-demo-label{font-size:11px;color:#C8BFAF;font-family:var(--font-sans);margin:0 0 10px}
+        .lg-demo-row{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+        .lg-demo-chip{background:#F5F0E8;border:1px solid #E0D5C5;border-radius:7px;padding:5px 13px;font-size:11px;color:#888;font-family:var(--font-mono);cursor:pointer;transition:background 0.15s,color 0.15s}
+        .lg-demo-chip:hover{background:#EDE0CC;color:#333}
+        .lg-footer{position:fixed;bottom:18px;left:0;right:0;text-align:center;font-size:11px;color:#C8BFAF;font-family:var(--font-sans);letter-spacing:0.5px}
+        @media(max-width:780px){.lg-char{display:none}.lg-card{padding:36px 28px}}
+      `}</style>
+
+      <div className="lg-page">
+        <div className="lg-layout">
+
+          {/* Left illustration: Cognitive ERP Data Streams */}
+          <div className="lg-char">
+            <LoginCharSvg type="left" floatDelay="0s" />
           </div>
-          <div className="form-group">
-            <label className="form-label">Password</label>
-            <input className="form-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+
+          {/* Login card */}
+          <div className="lg-card">
+            {/* CLAVIS key logo */}
+            <div className="lg-logo-wrap">
+              <svg width="58" height="54" viewBox="0 0 58 54" fill="none">
+                <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#1B3254"/>
+                <circle cx="22" cy="27" r="9" fill="#C89B3C"/>
+                <circle cx="22" cy="27" r="4" fill="#1B3254"/>
+                <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+                <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+                <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
+              </svg>
+            </div>
+
+            <h1 className="lg-title">CLAVIS <span style={{ color: '#C89B3C' }}>ERP</span></h1>
+            <p className="lg-sub">Enterprise ERP Intelligence</p>
+
+            <form className="lg-form" onSubmit={handleSubmit}>
+              <input
+                className="lg-input"
+                value={userId}
+                onChange={e => setUserId(e.target.value)}
+                placeholder="Enter User ID"
+                autoFocus
+                autoComplete="username"
+              />
+              <div className="lg-pw-wrap">
+                <input
+                  className="lg-input"
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  style={{ paddingRight: 58 }}
+                />
+                <button type="button" className="lg-pw-toggle" onClick={() => setShowPw(p => !p)}>
+                  {showPw ? 'Hide' : 'Show'}
+                </button>
+              </div>
+
+              {error && <div className="lg-error">{error}</div>}
+
+              <button className="lg-btn" type="submit" disabled={!userId || !password || loading}>
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="lg-demo">
+              <p className="lg-demo-label">Quick demo access</p>
+              <div className="lg-demo-row">
+                {[['admin', 'SapAdmin@2026!'], ['fi_user', 'Finance@123'], ['hr_user', 'HR@123'], ['demo', 'demo']].map(([u, p]) => (
+                  <button key={u} className="lg-demo-chip" type="button" onClick={() => { setUserId(u); setPassword(p) }}>
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          {error && <div className="login-error">{error}</div>}
-          <button className="btn btn-primary login-btn" type="submit" disabled={!userId || !password || loading}>
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-        </form>
-        <div className="login-demo">
-          <span>Demo:</span>
-          <code>admin / SapAdmin@2026!</code>
-          <code>fi_user / Finance@123</code>
-          <code>hr_user / HR@123</code>
-          <code>demo / demo</code>
+
+          {/* Right illustration: Analytics Insight Dashboard */}
+          <div className="lg-char">
+            <LoginCharSvg type="right" floatDelay="0.8s" />
+          </div>
+
         </div>
+
+        <div className="lg-footer">Copyright © CLAVIS 2026 &nbsp;·&nbsp; Enterprise ERP Intelligence</div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -1355,35 +2515,113 @@ function _relativeDate(iso) {
   return d.toLocaleDateString()
 }
 
-function Sidebar({ activeModule, onModuleClick, onReset, sapMode, allowedModules,
-  conversations, sessionId, onNewChat, onLoadConversation, onDeleteConversation }) {
-  const visible = MODULES.filter(m => m.id === 'all' || allowedModules === null || allowedModules.includes(m.moduleKey))
+function Sidebar({ onReset, sapMode,
+  conversations, sessionId, onNewChat, onLoadConversation, onDeleteConversation,
+  collapsed, onToggleCollapse, searchQuery, onSearchChange, searchRef, currentUser, onLogout }) {
   const modeLabel = { mock: '🎭 Mock mode', cloud: '☁️ SAP Cloud', on_premise: '🏢 On-Premise' }[sapMode] || sapMode
+  const filteredConversations = conversations.filter(c => 
+    (c.title || 'Untitled').toLowerCase().includes((searchQuery || '').toLowerCase())
+  )
+
+  if (collapsed) {
+    return (
+      <div className="sidebar collapsed-sidebar">
+        <div className="sidebar-collapsed-header">
+          <button className="sidebar-toggle-btn" onClick={onToggleCollapse} title="Expand sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="4" y1="12" x2="20" y2="12" strokeLinecap="round" />
+              <line x1="4" y1="6" x2="20" y2="6" strokeLinecap="round" />
+              <line x1="4" y1="18" x2="20" y2="18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="sidebar-collapsed-logo" title="CLAVIS">
+          <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
+            <circle cx="7" cy="10" r="5.5" fill="#C89B3C"/>
+            <circle cx="7" cy="10" r="2.2" fill="#1a1a2e"/>
+            <rect x="12.5" y="8.5" width="8.5" height="3" rx="1.5" fill="#C89B3C"/>
+            <rect x="18" y="11.5" width="2.5" height="4" rx="1" fill="#C89B3C"/>
+            <rect x="14.5" y="11.5" width="2.2" height="5" rx="1" fill="#C89B3C"/>
+          </svg>
+        </div>
+
+        <button className="sidebar-collapsed-icon-btn" onClick={() => { onToggleCollapse(); setTimeout(() => searchRef.current?.focus(), 150) }} title="Search chats">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+
+        <button className="sidebar-collapsed-icon-btn" onClick={onNewChat} title="New chat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19" strokeLinecap="round" />
+            <line x1="5" y1="12" x2="19" y2="12" strokeLinecap="round" />
+          </svg>
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <div className="sidebar-collapsed-footer">
+          {currentUser && (
+            <div className="sidebar-collapsed-user" title={currentUser.full_name || currentUser.user_id}>
+              {currentUser.full_name ? currentUser.full_name[0].toUpperCase() : 'U'}
+            </div>
+          )}
+          <button className="sidebar-collapsed-icon-btn logout-btn" onClick={onLogout} title="Sign out">
+            <Icons.logout />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="sidebar">
-      <div className="sidebar-section-label">SAP Module</div>
-      <div className="sidebar-module-select-wrap">
-        <select
-          className="sidebar-module-select"
-          value={activeModule}
-          onChange={e => onModuleClick(e.target.value)}
-        >
-          {visible.map(mod => (
-            <option key={mod.id} value={mod.id}>
-              {mod.name}
-            </option>
-          ))}
-        </select>
+      <div className="sidebar-header">
+        <div className="sidebar-logo-section">
+          <span className="sidebar-brand-name">CLA<span className="brand-accent">VIS</span></span>
+          <span className="sidebar-brand-badge">v0.1</span>
+        </div>
+        <button className="sidebar-toggle-btn" onClick={onToggleCollapse} title="Collapse sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="4" y1="12" x2="20" y2="12" strokeLinecap="round" />
+            <line x1="4" y1="6" x2="20" y2="6" strokeLinecap="round" />
+            <line x1="4" y1="18" x2="20" y2="18" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="sidebar-search-container">
+        <div className="sidebar-search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="search-icon">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            ref={searchRef}
+            type="text"
+            className="sidebar-search-input"
+            placeholder="Search chats"
+            value={searchQuery}
+            onChange={e => onSearchChange(e.target.value)}
+          />
+          <kbd className="sidebar-kbd">⌘K</kbd>
+        </div>
+      </div>
+
+      <div className="sidebar-new-chat-container">
+        <button className="sidebar-new-chat-btn" onClick={onNewChat}>
+          <span className="plus-icon">+</span> New chat
+        </button>
       </div>
 
       <div className="sidebar-history-header">
-        <span className="sidebar-section-label" style={{ padding: 0 }}>Chat history</span>
-        <button className="compact-new-chat-btn" onClick={onNewChat}>+ New</button>
+        <span className="sidebar-section-label" style={{ padding: 0 }}>Earlier</span>
       </div>
-      <button className="sidebar-refresh-btn" onClick={() => window.location.reload()}>Refresh</button>
 
       <div className="history-list">
-        {conversations.map(c => (
+        {filteredConversations.map(c => (
           <div key={c.session_id}
             className={`history-item ${c.session_id === sessionId ? 'active' : ''}`}
             onClick={() => onLoadConversation(c.session_id)}>
@@ -1399,13 +2637,26 @@ function Sidebar({ activeModule, onModuleClick, onReset, sapMode, allowedModules
             </button>
           </div>
         ))}
+        {filteredConversations.length === 0 && (
+          <div className="history-empty">No conversations found</div>
+        )}
       </div>
-
       <div className="sidebar-footer">
-        <div className="sidebar-mode-label">{modeLabel}</div>
-        <button className="clear-btn" onClick={onReset}>
-          <Icons.trash /> Clear Conversation
-        </button>
+        {currentUser && (
+          <div className="sidebar-user-section">
+            <div className="sidebar-user-avatar">
+              {currentUser.full_name ? currentUser.full_name[0].toUpperCase() : 'U'}
+            </div>
+            <div className="sidebar-user-details">
+              <span className="user-name">{currentUser.full_name || currentUser.user_id}</span>
+              <span className="user-role">READER</span>
+            </div>
+            <button className="sidebar-footer-logout-btn" onClick={onLogout} title="Sign out">
+              <Icons.logout />
+            </button>
+          </div>
+        )}
+        <div className="sidebar-mode-label" style={{ marginTop: 8 }}>{modeLabel}</div>
       </div>
     </div>
   )
@@ -1435,6 +2686,41 @@ function _getOrCreateSessionId(userId) {
   return sid
 }
 
+function getModelIcon(modelName) {
+  const lower = (modelName || '').toLowerCase()
+  if (lower.includes('code')) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="16 18 22 12 16 6" />
+        <polyline points="8 6 2 12 8 18" />
+      </svg>
+    )
+  }
+  if (lower.includes('gemma')) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polygon points="12 2 22 8.5 22 19.5 12 22 2 19.5 2 8.5" />
+      </svg>
+    )
+  }
+  if (lower.includes('mistral')) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="9" y1="16" x2="9" y2="16" />
+      <line x1="15" y1="16" x2="15" y2="16" />
+    </svg>
+  )
+}
+
 export default function App() {
   const [messages, setMessages] = useState([])
   const [streamingMsg, setStreamingMsg] = useState(null)
@@ -1447,11 +2733,48 @@ export default function App() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [model, setModel] = useState('llama3.2')
-  const [activeModule, setActiveModule] = useState('all')
   const [ollamaStatus, setOllamaStatus] = useState('checking')
   const [sapMode, setSapMode] = useState('mock')
   const [showSettings, setShowSettings] = useState(false)
   const [researchMode, setResearchMode] = useState(false)
+
+  // ── Theme, Sidebar, Search & Modal States ───────────────────────────────────
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showDataModal, setShowDataModal] = useState(false)
+  const [modalData, setModalData] = useState(null) // { columns, rows, total, title }
+  const [modalTab, setModalTab] = useState('table') // 'table' | 'chart'
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false)
+
+  const sidebarSearchRef = useRef(null)
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed))
+  }, [sidebarCollapsed])
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSidebarCollapsed(false)
+        setTimeout(() => {
+          sidebarSearchRef.current?.focus()
+        }, 100)
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [])
 
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('sap_agent_token'))
   const [currentUser, setCurrentUser] = useState(() => {
@@ -1459,7 +2782,6 @@ export default function App() {
   })
   const [authEnabled, setAuthEnabled] = useState(true)
   const [devSecretWarn, setDevSecretWarn] = useState(false)
-  const [allowedModules, setAllowedModules] = useState(null)
 
   // ── Chat history ────────────────────────────────────────────────────────────
   const [sessionId, setSessionId] = useState(() => {
@@ -1474,6 +2796,14 @@ export default function App() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const hashLoadedRef = useRef(false)
+  const [showModelDropdown, setShowModelDropdown] = useState(false)
+
+  const adjustInputHeight = () => {
+    const textarea = inputRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 260)}px`
+  }
 
   const needsLogin = authEnabled && !authToken
 
@@ -1491,7 +2821,7 @@ export default function App() {
     localStorage.removeItem('sap_agent_token')
     localStorage.removeItem('sap_agent_refresh_token')
     localStorage.removeItem('sap_agent_user')
-    setAuthToken(null); setCurrentUser(null); setMessages([]); setStreamingMsg(null); streamingRef.current = { content: '', status_steps: [] }; setAllowedModules(null)
+    setAuthToken(null); setCurrentUser(null); setMessages([]); setStreamingMsg(null); streamingRef.current = { content: '', status_steps: [] }
     setConversations([]); setSessionId('default'); setViewMode('initial')
     hashLoadedRef.current = false; window.location.hash = '#/'
   }, [])
@@ -1512,22 +2842,6 @@ export default function App() {
       } catch { setOllamaStatus('disconnected') }
     }
     check(); const id = setInterval(check, 30000); return () => clearInterval(id)
-  }, [authToken, handleLogout])
-
-  useEffect(() => {
-    if (!authToken) return
-    apiFetch('/auth/me').then(r => { if (r.status === 401) { handleLogout(); return } return r.json() })
-      .then(d => {
-        if (!d) return
-        if (d.roles?.includes('admin')) { setAllowedModules(null) }
-        else {
-          setAllowedModules(d.allowed_modules || [])
-          if (d.allowed_modules?.length === 1) {
-            const mod = MODULES.find(m => m.moduleKey === d.allowed_modules[0])
-            if (mod) setActiveModule(mod.id)
-          }
-        }
-      }).catch(() => { })
   }, [authToken, handleLogout])
 
   useEffect(() => {
@@ -1641,6 +2955,7 @@ export default function App() {
     setViewMode('conversation')
     setMessages(p => [...p, { role: 'user', content: msg, userInitial }])
     setInput(''); setLoading(true)
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     try {
       const res = await apiFetch('/research', { method: 'POST', body: JSON.stringify({ query: msg }) })
       if (res.status === 401) { handleLogout(); return }
@@ -1651,7 +2966,7 @@ export default function App() {
         research_result: { formatted_report: data.report, anomalies: data.anomalies || [], tools_run: data.tools_used || [], sources_used: data.sap_sources || [], entity_type: data.entity_type, entity_id: data.entity_id },
         request_id: data.request_id,
       }])
-    } catch { setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the SAP AI Agent API.' }]) }
+    } catch { setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the CLAVIS API.' }]) }
     finally { setLoading(false); setTimeout(() => inputRef.current?.focus(), 50) }
   }, [loading, handleLogout, userInitial])
 
@@ -1661,6 +2976,7 @@ export default function App() {
     setViewMode('conversation')
     setMessages(p => [...p, { role: 'user', content: msg, userInitial }])
     setInput(''); setLoading(true)
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
     if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
     streamingRef.current = { content: '', status_steps: [] }
@@ -1782,7 +3098,7 @@ export default function App() {
       }
     } catch {
       setStreamingMsg(null)
-      setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the SAP AI Agent API. Make sure the server is running on port 8000.' }])
+      setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the CLAVIS API. Make sure the server is running on port 8000.' }])
     } finally {
       setLoading(false)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -1795,119 +3111,245 @@ export default function App() {
     try { await apiFetch('/reset', { method: 'POST', body: JSON.stringify({ message: '', model, session_id: sessionId }) }) } catch { }
   }
 
-  const currentModule = MODULES.find(m => m.id === activeModule) || MODULES[0]
   const showExamples = viewMode === 'initial'
   const primaryRole = currentUser?.roles?.[0]
   const statusLabel = { checking: 'Checking…', connected: 'LLM Online', disconnected: 'LLM Offline' }[ollamaStatus]
+
+  const handleViewData = (tableData, title = 'Data Preview') => {
+    setModalData({ ...tableData, title })
+    setModalTab('table')
+    setShowDataModal(true)
+  }
+
+  const handleVisualizeData = (tableData, title = 'Data Visualization') => {
+    setModalData({ ...tableData, title })
+    setModalTab('chart')
+    setShowDataModal(true)
+  }
 
   if (needsLogin) return <LoginScreen onLogin={handleLogin} />
 
   return (
     <div className="app-shell">
       {showSettings && <SettingsModal onClose={handleSettingsClose} currentUser={currentUser} />}
-      {devSecretWarn && <DevWarningBanner />}
+      <DataViewModal 
+        isOpen={showDataModal} 
+        onClose={() => setShowDataModal(false)} 
+        data={modalData} 
+        activeTab={modalTab} 
+        onTabChange={setModalTab} 
+      />
 
-      {/* Topbar */}
-      <header className="topbar">
-        <div className="topbar-left">
-          <div className="topbar-logo">SAP</div>
-          <span className="topbar-name">SAP AI Agent</span>
-          <span className="topbar-sep" />
-          <span className="topbar-subtitle">Natural Language ERP Interface</span>
-        </div>
-        <div className="topbar-right">
-          <div className="status-pill">
-            <div className={`status-dot ${ollamaStatus}`} />
-            <span>{statusLabel}</span>
-          </div>
-          {currentUser && (
-            <div className="user-chip">
-              <div className="user-avatar">{userInitial}</div>
-              <div className="user-info">
-                <span className="user-name">{currentUser.full_name || currentUser.user_id}</span>
-                {primaryRole && <span className="user-role">{ROLE_LABELS[primaryRole] || primaryRole}</span>}
-              </div>
-              <button className="icon-btn" onClick={handleLogout} title="Sign out" style={{ marginLeft: 2 }}>
-                <Icons.logout />
-              </button>
+      <Sidebar
+        onReset={handleReset}
+        sapMode={sapMode}
+        conversations={conversations}
+        sessionId={viewMode === 'conversation' ? sessionId : null}
+        onNewChat={handleNewChat}
+        onLoadConversation={handleLoadConversation}
+        onDeleteConversation={handleDeleteConversation}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchRef={sidebarSearchRef}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+      />
+
+      <div className="main-content-layout">
+        {devSecretWarn && <DevWarningBanner />}
+
+        {/* Topbar */}
+        <header className="topbar">
+          <div className="topbar-left">
+            <div className="topbar-logo">
+              <svg width="18" height="17" viewBox="0 0 22 20" fill="none">
+                <circle cx="7" cy="10" r="5.5" fill="#C89B3C"/>
+                <circle cx="7" cy="10" r="2.2" fill="#1a1a2e"/>
+                <rect x="12.5" y="8.5" width="8.5" height="3" rx="1.5" fill="#C89B3C"/>
+                <rect x="18" y="11.5" width="2.5" height="4" rx="1" fill="#C89B3C"/>
+                <rect x="14.5" y="11.5" width="2.2" height="5" rx="1" fill="#C89B3C"/>
+              </svg>
             </div>
-          )}
-          <button className="icon-btn" onClick={() => setShowSettings(true)} title="Configuration">
-            <Icons.settings />
-          </button>
-        </div>
-      </header>
-
-      <div className="body-row">
-        <Sidebar
-          activeModule={activeModule}
-          onModuleClick={setActiveModule}
-          onReset={handleReset}
-          sapMode={sapMode}
-          allowedModules={allowedModules}
-          conversations={conversations}
-          sessionId={viewMode === 'conversation' ? sessionId : null}
-          onNewChat={handleNewChat}
-          onLoadConversation={handleLoadConversation}
-          onDeleteConversation={handleDeleteConversation}
-        />
+            <span className="topbar-name">CLAVIS</span>
+            <span className="topbar-sep" />
+            <span className="topbar-subtitle">Enterprise ERP Intelligence</span>
+          </div>
+          <div className="topbar-right">
+            <div className="status-pill">
+              <div className={`status-dot ${ollamaStatus}`} />
+              <span>{statusLabel}</span>
+            </div>
+            {currentUser && (
+              <div className="user-chip">
+                <div className="user-avatar">{userInitial}</div>
+                <div className="user-info">
+                  <span className="user-name">{currentUser.full_name || currentUser.user_id}</span>
+                  {primaryRole && <span className="user-role">{ROLE_LABELS[primaryRole] || primaryRole}</span>}
+                </div>
+                <button className="icon-btn" onClick={handleLogout} title="Sign out" style={{ marginLeft: 2 }}>
+                  <Icons.logout />
+                </button>
+              </div>
+            )}
+            <button className="icon-btn" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} title="Toggle Light/Dark Theme">
+              {theme === 'light' ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2" />
+                  <path d="M12 20v2" />
+                  <path d="m4.93 4.93 1.41 1.41" />
+                  <path d="m17.66 17.66 1.41 1.41" />
+                  <path d="M2 12h2" />
+                  <path d="M20 12h2" />
+                  <path d="m6.34 17.66-1.41 1.41" />
+                  <path d="m19.07 4.93-1.41 1.41" />
+                </svg>
+              )}
+            </button>
+            <button className="icon-btn" onClick={() => setShowSettings(true)} title="Configuration">
+              <Icons.settings />
+            </button>
+          </div>
+        </header>
 
         {/* Chat */}
         <div className="chat-area">
           {showExamples ? (
-            <div className="welcome-panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '40px 20px' }}>
-              <div className="options-card">
-                <div className="options-card-header">
-                  <span className="options-card-title">What would you like help with today?</span>
-                  <button className="options-card-close" onClick={() => setViewMode('conversation')} title="Dismiss">✕</button>
+            <div className="welcome-panel-gradient" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, padding: '40px 20px', overflowY: 'auto' }}>
+              <div className="chat-home-container">
+                <div className="chat-home-header">
+                  <h1 className="chat-home-title">How can I help today?</h1>
+                  <p className="chat-home-subtitle">Type a command or ask a question</p>
                 </div>
-                <div className="options-card-list">
-                  {currentModule.examples.map((ex, i) => (
-                    <div
-                      key={i}
-                      className="options-card-row"
-                      onClick={() => sendMessage(ex)}
-                    >
-                      <span className="options-card-num">{i + 1}</span>
-                      <span className="options-card-text">{ex}</span>
-                      <span className="options-card-enter">↵</span>
+
+                {/* Explore Section */}
+                <div className="google-explore-section">
+                  <div className="google-explore-header">
+                    <h2 className="google-explore-title">Explore Clavis agents</h2>
+                  </div>
+
+                  <div className="google-cards-grid">
+                    <div className="google-card" onClick={() => setInput("What is the budget vs actual for Cost Center CC200?")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-yellow">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">FI/CO Analyst</span>
+                      </div>
+                      <p className="google-card-desc">Finance & Controlling agent for invoices and budget checks.</p>
                     </div>
-                  ))}
-                  <div
-                    className="options-card-row"
-                    onClick={() => {
-                      inputRef.current?.focus()
-                    }}
-                  >
-                    <span className="options-card-num">{currentModule.examples.length + 1}</span>
-                    <span className="options-card-text">Something else</span>
-                    <span className="options-card-enter">↵</span>
+
+                    <div className="google-card" onClick={() => setInput("Check stock level for MAT002 at plant 1000")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-blue">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+                            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">MM Stock Manager</span>
+                      </div>
+                      <p className="google-card-desc">Materials Management agent for stock levels and reordering.</p>
+                    </div>
+
+                    <div className="google-card" onClick={() => setInput("Show details for sales order SO5001")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-purple">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="9" cy="21" r="1" />
+                            <circle cx="20" cy="21" r="1" />
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">SD Sales Assistant</span>
+                      </div>
+                      <p className="google-card-desc">Sales & Distribution agent for tracking customer orders.</p>
+                    </div>
+
+                    <div className="google-card" onClick={() => setInput("Get employee info and leave balance for EMP001")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-green">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">HR Representative</span>
+                      </div>
+                      <p className="google-card-desc">Human Resources agent for leaves, payslips, and employee data.</p>
+                    </div>
+
+                    <div className="google-card" onClick={() => setInput("Show outstanding for customer ALEC001 unit T1-304")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-pink">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 21h18" />
+                            <path d="M19 21v-8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v8" />
+                            <path d="M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4" />
+                            <line x1="14" y1="1" x2="14" y2="4" />
+                            <line x1="10" y1="1" x2="10" y2="4" />
+                            <path d="M12 4a3 3 0 0 0-3 3v4h6V7a3 3 0 0 0-3-3z" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">Real Estate Analyst</span>
+                      </div>
+                      <p className="google-card-desc">Parivartan agent for unit outstandings and cheque parking.</p>
+                    </div>
+
+                    <div className="google-card" onClick={() => setInput("Show program ZREP_VENDOR_LIST source code")}>
+                      <div className="google-card-header">
+                        <div className="google-card-icon icon-orange">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="16 18 22 12 16 6" />
+                            <polyline points="8 6 2 12 8 18" />
+                          </svg>
+                        </div>
+                        <span className="google-card-title">ABAP Developer</span>
+                      </div>
+                      <p className="google-card-desc">Development and transport status check assistant.</p>
+                    </div>
                   </div>
-                </div>
-                <div className="options-card-footer">
-                  <div className="options-card-input-wrap">
-                    <span className="options-card-pencil-icon">✎</span>
-                    <input
-                      type="text"
-                      className="options-card-input-field"
-                      placeholder="Something else"
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && input.trim()) {
-                          sendMessage(input)
-                        }
-                      }}
-                    />
+
+                  <div className="google-explore-footer">
+                    <a className="google-build-link" onClick={() => { inputRef.current?.focus() }}>
+                      <span>Start building</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                        <polyline points="12 5 19 12 12 19" />
+                      </svg>
+                    </a>
                   </div>
-                  <button className="options-card-skip-btn" onClick={() => setViewMode('conversation')}>Skip</button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="messages-list">
-              {messages.map((msg, i) => <MessageRow key={i} msg={msg} />)}
-              {streamingMsg && <StreamingMessageRow msg={streamingMsg} />}
+              {messages.map((msg, i) => (
+                <MessageRow 
+                  key={i} 
+                  msg={msg} 
+                  onViewData={handleViewData} 
+                  onVisualizeData={handleVisualizeData} 
+                />
+              ))}
+              {streamingMsg && (
+                <StreamingMessageRow 
+                  msg={streamingMsg} 
+                  onViewData={handleViewData} 
+                  onVisualizeData={handleVisualizeData} 
+                />
+              )}
               {!streamingMsg && loading && <TypingIndicator />}
               <div ref={bottomRef} />
             </div>
@@ -1915,53 +3357,205 @@ export default function App() {
 
           {/* Input bar */}
           <div className="input-bar">
-            <div className="input-wrap">
-              <textarea
-                ref={inputRef}
-                className={`chat-input ${researchMode ? 'research-mode' : ''}`}
-                rows={1}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={researchMode
-                  ? 'Research any SAP entity — e.g. "research vendor V001" or "deep dive on MAT002"'
-                  : activeModule === 'ABAP'
-                    ? 'Ask about ABAP… e.g. "Generate ABAP code for: transport DEVK900123 status check" or paste code to review'
-                    : `Ask about ${currentModule.name}… (Enter to send, Shift+Enter for newline)`
-                }
-                disabled={loading}
-              />
-              <div className="chat-input-controls">
-                <select
-                  className="model-select-compact"
-                  value={model}
-                  onChange={e => setModel(e.target.value)}
-                  disabled={researchMode}
-                  title="Select LLM model"
-                >
-                  {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <button
-                  className={`research-btn-compact ${researchMode ? 'on' : ''}`}
-                  onClick={() => setResearchMode(r => !r)}
-                  title="Toggle Auto Research — chains multiple SAP tools automatically"
-                >
-                  <Icons.beaker />
-                </button>
-                <button
-                  className="send-btn-compact"
-                  onClick={() => sendMessage(input)}
-                  disabled={!input.trim() || loading}
-                  title="Send"
-                >
-                  {loading ? <div className="spinner dark" /> : <Icons.send />}
-                </button>
+            <div className={`prompt-box ${researchMode ? 'research-active' : ''}`}>
+              <div className="prompt-textarea-container">
+                <textarea
+                  ref={inputRef}
+                  className="prompt-textarea"
+                  value={input}
+                  placeholder={researchMode
+                    ? 'Research any SAP entity — e.g. "research vendor V001" or "deep dive on MAT002"'
+                    : 'Ask anything about SAP… (Enter to send, Shift+Enter for newline)'
+                  }
+                  onChange={e => {
+                    setInput(e.target.value)
+                    adjustInputHeight()
+                  }}
+                  onKeyDown={handleKeyDown}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="prompt-footer">
+                <div className="prompt-footer-left">
+                  {/* Custom Model Dropdown */}
+                  <div className="custom-dropdown-container" style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      className={`custom-dropdown-trigger ${showModelDropdown ? 'open' : ''}`}
+                      onClick={() => setShowModelDropdown(!showModelDropdown)}
+                      disabled={researchMode}
+                      title="Select LLM model"
+                    >
+                      {getModelIcon(model)}
+                      <span style={{ textTransform: 'capitalize' }}>{model}</span>
+                      <svg className="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+
+                    {showModelDropdown && (
+                      <div className="custom-dropdown-overlay">
+                        <div className="custom-dropdown-backdrop" onClick={() => setShowModelDropdown(false)} />
+                        <div className="custom-dropdown-menu">
+                          <div className="custom-dropdown-header">Select Model</div>
+                          {MODELS.map(m => (
+                            <button
+                              key={m}
+                              type="button"
+                              className={`custom-dropdown-item ${model === m ? 'active' : ''}`}
+                              onClick={() => {
+                                setModel(m)
+                                setShowModelDropdown(false)
+                              }}
+                            >
+                              <span className="dropdown-item-content">
+                                {getModelIcon(m)}
+                                <span className="dropdown-item-text">{m}</span>
+                              </span>
+                              {model === m && (
+                                <svg className="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="prompt-divider" />
+
+                  {/* Attachment Button */}
+                  <label className="attachment-btn" title="Attach file">
+                    <input
+                      type="file"
+                      className="hidden-file-input"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setInput(prev => prev + ` [Attached: ${file.name}] `)
+                          setTimeout(adjustInputHeight, 50)
+                        }
+                      }}
+                    />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </label>
+
+                  {/* Research Mode Toggle (Beaker) */}
+                  <button
+                    type="button"
+                    className={`research-toggle-btn ${researchMode ? 'active' : ''}`}
+                    onClick={() => setResearchMode(!researchMode)}
+                    title="Toggle Auto Research — chains multiple SAP tools automatically"
+                  >
+                    <Icons.beaker />
+                  </button>
+
+                  {/* Suggestions Button */}
+                  <button
+                    type="button"
+                    className="research-toggle-btn"
+                    onClick={() => setShowSuggestionsModal(true)}
+                    title="Show suggestions"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="9" y1="9" x2="9.01" y2="9" />
+                      <line x1="15" y1="9" x2="15.01" y2="9" />
+                      <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="prompt-footer-right">
+                  {/* Send Button */}
+                  <button
+                    type="button"
+                    className={`prompt-send-btn ${input.trim() && !loading ? 'active' : ''}`}
+                    onClick={() => {
+                      if (input.trim() && !loading) {
+                        sendMessage(input)
+                      }
+                    }}
+                    disabled={!input.trim() || loading}
+                    title="Send message"
+                  >
+                    {loading ? (
+                      <div className="spinner dark" />
+                    ) : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                        <polyline points="12 5 19 12 12 19" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="input-footer">SAP AI Agent can make mistakes. Verify important results.</div>
+            <div className="input-footer">CLAVIS can make mistakes. Verify important results.</div>
           </div>
         </div>
       </div>
+      {showSuggestionsModal && (
+        <div className="suggestions-modal-overlay" onClick={() => setShowSuggestionsModal(false)}>
+          <div className="suggestions-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="suggestions-modal-header">
+              <span className="suggestions-modal-title">What would you like help with today?</span>
+              <button className="suggestions-modal-close-btn" onClick={() => setShowSuggestionsModal(false)} title="Close">✕</button>
+            </div>
+            <div className="suggestions-modal-list">
+              {MODULES[0].examples.map((ex, i) => (
+                <div
+                  key={i}
+                  className="suggestions-modal-row"
+                  onClick={() => {
+                    sendMessage(ex);
+                    setShowSuggestionsModal(false);
+                  }}
+                >
+                  <span className="suggestions-modal-num">{i + 1}</span>
+                  <span className="suggestions-modal-text">{ex}</span>
+                  <span className="options-card-enter">↵</span>
+                </div>
+              ))}
+              <div
+                className="suggestions-modal-row"
+                onClick={() => {
+                  setShowSuggestionsModal(false);
+                  setTimeout(() => inputRef.current?.focus(), 100);
+                }}
+              >
+                <span className="suggestions-modal-num">{MODULES[0].examples.length + 1}</span>
+                <span className="suggestions-modal-text">Something else</span>
+                <span className="options-card-enter">↵</span>
+              </div>
+            </div>
+            <div className="suggestions-modal-footer">
+              <div className="suggestions-modal-input-wrap">
+                <span className="suggestions-modal-pencil-icon">✎</span>
+                <input
+                  type="text"
+                  className="suggestions-modal-input-field"
+                  placeholder="Something else"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && input.trim()) {
+                      sendMessage(input);
+                      setShowSuggestionsModal(false);
+                    }
+                  }}
+                />
+              </div>
+              <button className="suggestions-modal-skip-btn" onClick={() => setShowSuggestionsModal(false)}>Skip</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
