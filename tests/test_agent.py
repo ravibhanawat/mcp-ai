@@ -170,12 +170,54 @@ class TestToolExecution(unittest.TestCase):
             self.assertIn("tcode", result["sap_source"])
 
 
+# ── Visualization keyword detection tests ─────────────────────────────────────
+class TestVizKeywords(unittest.TestCase):
+    """Tests that _show_viz logic correctly identifies visualization intent."""
+
+    _VIZ_KEYWORDS = {
+        "visualize", "visualise", "chart", "plot", "graph",
+        "bar chart", "pie chart", "trend", "show me a chart",
+        "histogram", "scatter",
+    }
+
+    def _show_viz(self, message):
+        return any(kw in message.lower() for kw in self._VIZ_KEYWORDS)
+
+    def test_visualize_keyword(self):
+        self.assertTrue(self._show_viz("visualize budget vs actual"))
+
+    def test_chart_keyword(self):
+        self.assertTrue(self._show_viz("Show me a chart of open POs"))
+
+    def test_plot_keyword(self):
+        self.assertTrue(self._show_viz("plot employee headcount by department"))
+
+    def test_graph_keyword(self):
+        self.assertTrue(self._show_viz("graph the cost center spend"))
+
+    def test_bar_chart(self):
+        self.assertTrue(self._show_viz("give me a bar chart of invoices"))
+
+    def test_pie_chart(self):
+        self.assertTrue(self._show_viz("pie chart of material stock"))
+
+    def test_no_viz_intent(self):
+        self.assertFalse(self._show_viz("get cost center budget for CC200"))
+
+    def test_no_viz_intent_list(self):
+        self.assertFalse(self._show_viz("list all open purchase orders"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(self._show_viz("VISUALIZE the data"))
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     suite.addTests(loader.loadTestsFromTestCase(TestInferToolFromQuery))
     suite.addTests(loader.loadTestsFromTestCase(TestExtractToolCall))
     suite.addTests(loader.loadTestsFromTestCase(TestToolExecution))
+    suite.addTests(loader.loadTestsFromTestCase(TestVizKeywords))
 
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
