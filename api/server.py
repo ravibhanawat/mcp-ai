@@ -1,5 +1,5 @@
 """
-SAP AI Agent - REST API Server
+DeepResearch AI - REST API Server
 Run: uvicorn api.server:app --reload --port 8000
 
 Enterprise security hardening:
@@ -167,7 +167,7 @@ async def lifespan(app: FastAPI):
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="SAP AI Agent API",
+    title="DeepResearch AI API",
     description="Natural language interface to SAP ERP modules",
     version="4.0.0",
     lifespan=lifespan,
@@ -485,10 +485,8 @@ def me(current_user: dict = Depends(get_current_user)):
     if not user:
         return current_user
     from auth.rbac import ROLE_MODULES
-    allowed_modules = list({
-        m for role in user.get("roles", []) for m in ROLE_MODULES.get(role, [])
-    })
-    return {**user, "allowed_modules": sorted(allowed_modules)}
+    all_modules = sorted({m for modules in ROLE_MODULES.values() for m in modules})
+    return {**user, "allowed_modules": all_modules}
 
 
 @app.get("/auth/users")
@@ -847,6 +845,14 @@ async def chat_stream(
         # Accumulate streamed table rows so large datasets persist correctly
         _streamed_rows     = []
 
+        # ── Visualization intent detection ────────────────────────────────────
+        _VIZ_KEYWORDS = {
+            "visualize", "visualise", "chart", "plot", "graph",
+            "bar chart", "pie chart", "trend", "show me a chart",
+            "histogram", "scatter",
+        }
+        _show_viz = any(kw in body.message.lower() for kw in _VIZ_KEYWORDS)
+
         def _sse(event_type: str, payload: dict) -> str:
             return f"event: {event_type}\ndata: {json.dumps(payload, cls=_JsonEncoder)}\n\n"
 
@@ -879,6 +885,7 @@ async def chat_stream(
                     "tool_called": tool_called, "tool_result": None,
                     "sap_source": None, "report": None,
                     "abap_check": None, "abap_code": abap_code_payload,
+                    "show_visualization": False,
                 })
                 return
 
@@ -924,6 +931,7 @@ async def chat_stream(
                         "tool_called": tool_called, "tool_result": None,
                         "sap_source": None, "report": None,
                         "abap_check": abap_check_payload, "abap_code": None,
+                        "show_visualization": False,
                     })
                     return
 
@@ -943,6 +951,7 @@ async def chat_stream(
                             "tool_called": tool_called, "tool_result": None,
                             "sap_source": None, "report": report_payload,
                             "abap_check": None, "abap_code": None,
+                            "show_visualization": _show_viz,
                         })
                         return
                 except Exception:
@@ -959,8 +968,11 @@ async def chat_stream(
                         tool_called  = done_data.get("tool_called")
                         tool_result  = done_data.get("tool_result")
                         sap_source   = done_data.get("sap_source")
+                        done_data["show_visualization"] = _show_viz
+                        yield f"event: done\ndata: {json.dumps(done_data, cls=_JsonEncoder)}\n\n"
                     except Exception:
-                        pass
+                        yield event_str
+                    continue
                 elif event_str.startswith("event: text_delta"):
                     try:
                         data_line = next(l for l in event_str.split("\n") if l.startswith("data:"))
@@ -1315,7 +1327,7 @@ def autonomous(
 @app.get("/")
 def root():
     return {
-        "message":        "SAP AI Agent API",
+        "message":        "DeepResearch AI API",
         "version":        "4.0.0",
         "status":         "running",
         "modules":        ["FI/CO", "MM", "SD", "HR", "PP", "ABAP"],
