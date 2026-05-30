@@ -3157,6 +3157,7 @@ export default function App() {
           } else if (eventType === 'done') {
             if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
             if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
+            const finalTableData = tableRef.current ? { ...tableRef.current, loading: false } : null
             const finalMsg = {
               role: 'bot',
               content: streamingRef.current.content,
@@ -3167,10 +3168,16 @@ export default function App() {
               report: payload.report || null,
               abap_check: payload.abap_check || null,
               abap_code: payload.abap_code || null,
-              tableData: tableRef.current ? { ...tableRef.current, loading: false } : null,
+              tableData: finalTableData,
+              userQuery: msg,
             }
             setStreamingMsg(null)
             setMessages(p => [...p, finalMsg])
+            if (payload.show_visualization && finalTableData) {
+              setModalData({ ...finalTableData, title: msg.slice(0, 60) })
+              setModalTab('chart')
+              setShowDataModal(true)
+            }
             loadConversations()
 
           } else if (eventType === 'error') {
