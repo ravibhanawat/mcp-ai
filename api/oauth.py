@@ -153,7 +153,7 @@ def _login_page(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SAP AI Agent — Authorize</title>
+  <title>DeepResearch AI — Authorize</title>
   <style>
     *{{box-sizing:border-box;margin:0;padding:0}}
     body{{background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -184,7 +184,7 @@ def _login_page(
 <body>
 <div class="card">
   <div class="logo">🤖</div>
-  <h1>SAP AI Agent</h1>
+  <h1>DeepResearch AI</h1>
   <p class="sub">Sign in to grant access</p>
 
   <div class="client-box">

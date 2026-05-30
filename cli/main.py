@@ -1,5 +1,5 @@
 """
-SAP AI Agent - Interactive CLI
+DeepResearch AI - Interactive CLI
 Beautiful terminal interface for interacting with SAP modules via AI
 """
 import sys
@@ -116,7 +116,7 @@ def run_cli(model: str = "llama3.2"):
     print_banner()
 
     # Initialize agent
-    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Initializing SAP Agent with Ollama model: {Colors.BOLD}{model}{Colors.RESET}")
+    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Initializing DeepResearch AI Agent with Ollama model: {Colors.BOLD}{model}{Colors.RESET}")
 
     agent = SAPAgent(model=model)
 
@@ -149,7 +149,7 @@ def run_cli(model: str = "llama3.2"):
 
             # Handle commands
             if user_input.lower() in ("quit", "exit", "q"):
-                print(f"\n  {Colors.CYAN}Goodbye! Closing SAP Agent.{Colors.RESET}\n")
+                print(f"\n  {Colors.CYAN}Goodbye! Closing DeepResearch AI.{Colors.RESET}\n")
                 break
 
             elif user_input.lower() == "help":
@@ -193,7 +193,7 @@ def run_cli(model: str = "llama3.2"):
                 print_tool_call(tool_name, tool_result)
 
             # Show response
-            print(f"\n  {Colors.GREEN}{Colors.BOLD}SAP Agent ❯{Colors.RESET}")
+            print(f"\n  {Colors.GREEN}{Colors.BOLD}DeepResearch AI ❯{Colors.RESET}")
             print_separator("·", 68)
 
             # Format and print response
@@ -219,7 +219,7 @@ def run_cli(model: str = "llama3.2"):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="SAP AI Agent with Ollama")
+    parser = argparse.ArgumentParser(description="DeepResearch AI with Ollama")
     parser.add_argument("--model", default="llama3.2", help="Ollama model to use (default: llama3.2)")
     parser.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama API URL")
     args = parser.parse_args()

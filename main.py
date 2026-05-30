@@ -1,5 +1,5 @@
 """
-SAP AI Agent - Entry Point
+DeepResearch AI - Entry Point
 Run: python main.py [--model llama3.2] [--ollama-url http://localhost:11434]
 """
 import sys
@@ -13,7 +13,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="SAP AI Agent - Natural language interface to all SAP modules",
+        description="DeepResearch AI - Natural language interface to all SAP modules",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

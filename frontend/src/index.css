@@ -10,10 +10,10 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace;
 
   /* Background */
-  --bg:         #ffffff;
+  --bg:         #fafafa;
   --bg-card:    #ffffff;
   --bg-hover:   #f4f4f5;
-  --bg-subtle:  #fafafa;
+  --bg-subtle:  #ffffff;
   --bg-primary:   var(--bg-card);
   --bg-secondary: var(--bg-subtle);
 
@@ -33,15 +33,14 @@
   --text-secondary: #71717a;
   --text-muted:     #a1a1aa;
 
-  /* Sidebar — light */
-  --sb-bg:          #fafafa;
-  --sb-border:      #e4e4e7;
-  --sb-text:        #71717a;
-  --sb-text-hover:  #09090b;
-  --sb-text-active: #09090b;
-  --sb-active-bg:   #f4f4f5;
-  --sb-section:     #a1a1aa;
-
+  /* Sidebar — default dark for premium TatvaAI theme */
+  --sb-bg:          #09090b;
+  --sb-border:      #1f1f23;
+  --sb-text:        #a1a1aa;
+  --sb-text-hover:  #ffffff;
+  --sb-text-active: #ffffff;
+  --sb-active-bg:   #1c1c1f;
+  --sb-section:     #71717a;
 
   /* Topbar — light */
   --tb-bg:     #ffffff;
@@ -104,6 +103,45 @@
   /* Transitions */
   --t:      150ms ease;
   --t-slow: 250ms ease;
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --bg:         #09090b;
+  --bg-card:    #18181b;
+  --bg-hover:   #27272a;
+  --bg-subtle:  #18181b;
+  --bg-primary:   var(--bg-card);
+  --bg-secondary: var(--bg-subtle);
+
+  /* Glassmorphism & Depth */
+  --c-glass-bg:      rgba(24, 24, 27, 0.75);
+  --c-glass-border:  rgba(39, 39, 42, 0.6);
+  --glow-accent:     0 0 0 3px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --glow-purple:     0 0 0 3px rgba(124, 58, 237, 0.2), 0 4px 12px rgba(0, 0, 0, 0.2);
+
+  /* Border */
+  --border:        #27272a;
+  --border-strong: #3f3f46;
+
+  /* Text */
+  --text-primary:   #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted:     #71717a;
+
+  /* Topbar — dark */
+  --tb-bg:     #09090b;
+  --tb-border: #27272a;
+  --tb-text:   #fafafa;
+
+  /* Sidebar — dark overrides */
+  --sb-bg:          #09090b;
+  --sb-border:      #27272a;
+  --sb-text:        #a1a1aa;
+  --sb-text-hover:  #ffffff;
+  --sb-text-active: #ffffff;
+  --sb-active-bg:   #1c1c1f;
+  --sb-section:     #71717a;
 }
 
 /* ─── Base ──────────────────────────────────────────────────────────────────── */
