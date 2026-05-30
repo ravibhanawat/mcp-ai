@@ -1,0 +1,103 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: CLAVIS
+        - generic [ref=e8]: v0.1
+      - button "Collapse sidebar" [ref=e9] [cursor=pointer]:
+        - img [ref=e10]
+    - generic [ref=e12]:
+      - img [ref=e13]
+      - textbox "Search chats" [ref=e16]
+      - generic [ref=e17]: ⌘K
+    - button "+ New chat" [ref=e19] [cursor=pointer]:
+      - generic [ref=e20]: +
+      - text: New chat
+    - generic [ref=e21]: SAP Module
+    - combobox [ref=e23] [cursor=pointer]:
+      - option "All Modules" [selected]
+      - option "FI/CO"
+      - option "MM"
+      - option "SD"
+      - option "HR"
+      - option "PP"
+      - option "ABAP"
+      - option "Real Estate"
+    - generic [ref=e25]: Earlier
+    - generic [ref=e27]: No conversations found
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]: S
+        - generic [ref=e31]:
+          - generic [ref=e32]: System Administrator
+          - generic [ref=e33]: READER
+        - button "Sign out" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+      - generic [ref=e38]: 🎭 Mock mode
+      - button "Clear Conversation" [ref=e39] [cursor=pointer]:
+        - img [ref=e40]
+        - text: Clear Conversation
+  - generic [ref=e42]:
+    - banner [ref=e43]:
+      - generic [ref=e44]:
+        - img [ref=e46]
+        - generic [ref=e52]: CLAVIS
+      - generic [ref=e53]:
+        - generic [ref=e56]: Checking…
+        - generic [ref=e57]:
+          - generic [ref=e58]: S
+          - generic [ref=e59]:
+            - generic [ref=e60]: System Administrator
+            - generic [ref=e61]: Administrator
+          - button "Sign out" [ref=e62] [cursor=pointer]:
+            - img [ref=e63]
+        - button "Toggle Light/Dark Theme" [ref=e66] [cursor=pointer]:
+          - img [ref=e67]
+        - button "Configuration" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+    - generic [ref=e73]:
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - generic [ref=e77]: What would you like help with today?
+          - button "✕" [ref=e78] [cursor=pointer]
+        - generic [ref=e79]:
+          - generic [ref=e80] [cursor=pointer]:
+            - generic [ref=e81]: "1"
+            - generic [ref=e82]: Show me open purchase orders
+            - generic [ref=e83]: ↵
+          - generic [ref=e84] [cursor=pointer]:
+            - generic [ref=e85]: "2"
+            - generic [ref=e86]: List all employees
+            - generic [ref=e87]: ↵
+          - generic [ref=e88] [cursor=pointer]:
+            - generic [ref=e89]: "3"
+            - generic [ref=e90]: What is the budget for CC100?
+            - generic [ref=e91]: ↵
+          - generic [ref=e92] [cursor=pointer]:
+            - generic [ref=e93]: "4"
+            - generic [ref=e94]: Get customer info for C001
+            - generic [ref=e95]: ↵
+          - generic [ref=e96] [cursor=pointer]:
+            - generic [ref=e97]: "5"
+            - generic [ref=e98]: Something else
+            - generic [ref=e99]: ↵
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - generic [ref=e102]: ✎
+            - textbox "Something else" [ref=e103]
+          - button "Skip" [ref=e104] [cursor=pointer]
+      - generic [ref=e105]:
+        - generic [ref=e106]:
+          - textbox "Ask about All Modules… (Enter to send, Shift+Enter for newline)" [ref=e107]
+          - generic [ref=e108]:
+            - combobox "Select LLM model" [ref=e109] [cursor=pointer]:
+              - option "llama3.2" [selected]
+              - option "llama3.1"
+              - option "mistral"
+              - option "gemma2"
+              - option "codellama"
+            - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e110] [cursor=pointer]:
+              - img [ref=e111]
+            - button "Send" [disabled] [ref=e113]:
+              - img [ref=e114]
+        - generic [ref=e117]: CLAVIS can make mistakes. Verify important results.

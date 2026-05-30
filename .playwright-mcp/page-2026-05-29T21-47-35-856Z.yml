@@ -1,0 +1,23 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - generic [ref=e35]:
+      - img [ref=e37]:
+        - generic [ref=e41]: SAP
+      - heading "SAP AI Agent" [level=1] [ref=e42]
+      - paragraph [ref=e43]: Natural Language ERP Interface
+      - generic [ref=e44]:
+        - textbox "Enter User ID" [active] [ref=e45]
+        - generic [ref=e46]:
+          - textbox "Password" [ref=e47]
+          - button "Show" [ref=e48] [cursor=pointer]
+        - button "Sign In" [disabled] [ref=e49]
+      - generic [ref=e50]:
+        - paragraph [ref=e51]: Quick demo access
+        - generic [ref=e52]:
+          - button "admin" [ref=e53] [cursor=pointer]
+          - button "fi_user" [ref=e54] [cursor=pointer]
+          - button "hr_user" [ref=e55] [cursor=pointer]
+          - button "demo" [ref=e56] [cursor=pointer]
+    - img [ref=e58]
+  - generic [ref=e87]: Copyright © SAP AI Agent 2026 · Natural Language ERP

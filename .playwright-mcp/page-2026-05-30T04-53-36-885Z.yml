@@ -1,0 +1,215 @@
+- generic [ref=e87]:
+  - generic [ref=e88]:
+    - generic [ref=e89]:
+      - generic [ref=e273]:
+        - generic [ref=e274]: CLAVIS
+        - generic [ref=e275]: v0.1
+      - button "Collapse sidebar" [ref=e276] [cursor=pointer]:
+        - img [ref=e277]
+    - generic [ref=e278]:
+      - img [ref=e279]
+      - textbox "Search chats" [ref=e282]
+      - generic [ref=e283]: ⌘K
+    - button "+ New chat" [ref=e285] [cursor=pointer]:
+      - generic [ref=e286]: +
+      - text: New chat
+    - generic [ref=e288]: Earlier
+    - generic [ref=e107]:
+      - generic [ref=e289] [cursor=pointer]:
+        - generic [ref=e290]:
+          - generic [ref=e291]: Get employee info and leave balance for EMP001
+          - generic [ref=e292]: 28-bhp91ct · 2 msgs · just now
+        - button "Delete" [ref=e293]:
+          - img [ref=e294]
+      - generic [ref=e296] [cursor=pointer]:
+        - generic [ref=e297]:
+          - generic [ref=e298]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e299]: 34-g6c2kb9 · 2 msgs · just now
+        - button "Delete" [ref=e300]:
+          - img [ref=e301]
+      - generic [ref=e303] [cursor=pointer]:
+        - generic [ref=e304]:
+          - generic [ref=e305]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e306]: 85-3bckp92 · 2 msgs · 5h ago
+        - button "Delete" [ref=e307]:
+          - img [ref=e308]
+      - generic [ref=e310] [cursor=pointer]:
+        - generic [ref=e311]:
+          - generic [ref=e312]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e313]: 73-r0f20an · 2 msgs · 5h ago
+        - button "Delete" [ref=e314]:
+          - img [ref=e315]
+      - generic [ref=e317] [cursor=pointer]:
+        - generic [ref=e318]:
+          - generic [ref=e319]: Show me open purchase orders
+          - generic [ref=e320]: 97-gafagsw · 2 msgs · 6h ago
+        - button "Delete" [ref=e321]:
+          - img [ref=e322]
+      - generic [ref=e324] [cursor=pointer]:
+        - generic [ref=e325]:
+          - generic [ref=e326]: Show me open purchase orders
+          - generic [ref=e327]: 27-4je0px3 · 2 msgs · 6h ago
+        - button "Delete" [ref=e328]:
+          - img [ref=e329]
+    - generic [ref=e136]:
+      - generic [ref=e137]:
+        - generic [ref=e331]: S
+        - generic [ref=e332]:
+          - generic [ref=e333]: System Administrator
+          - generic [ref=e334]: READER
+        - button "Sign out" [ref=e335] [cursor=pointer]:
+          - img [ref=e336]
+      - generic [ref=e339]: 🎭 Mock mode
+  - generic [ref=e147]:
+    - banner [ref=e148]:
+      - generic [ref=e149]:
+        - img [ref=e151]
+        - generic [ref=e157]: CLAVIS
+      - generic [ref=e158]:
+        - generic [ref=e161]: LLM Online
+        - generic [ref=e162]:
+          - generic [ref=e163]: S
+          - generic [ref=e164]:
+            - generic [ref=e165]: System Administrator
+            - generic [ref=e166]: Administrator
+          - button "Sign out" [ref=e167] [cursor=pointer]:
+            - img [ref=e168]
+        - button "Toggle Light/Dark Theme" [ref=e171] [cursor=pointer]:
+          - img [ref=e172]
+        - button "Configuration" [ref=e174] [cursor=pointer]:
+          - img [ref=e175]
+    - generic [ref=e178]:
+      - generic [ref=e179]:
+        - generic [ref=e340]:
+          - generic [ref=e341]: S
+          - generic [ref=e343]: Get employee info and leave balance for EMP001
+        - generic [ref=e344]:
+          - img [ref=e346]
+          - generic [ref=e348]:
+            - group [ref=e349] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e350]
+            - generic [ref=e352]:
+              - paragraph [ref=e353]:
+                - strong [ref=e355]: Employee Leave Balance for EMP001
+              - paragraph [ref=e356]:
+                - generic [ref=e357]: We have retrieved the leave balance information for EMP001 as per your request.
+              - paragraph [ref=e358]:
+                - strong [ref=e360]: Leave Balances Overview
+              - table [ref=e362]:
+                - rowgroup [ref=e363]:
+                  - row "Leave Type Entitled Used Balance" [ref=e364]:
+                    - columnheader "Leave Type" [ref=e365]
+                    - columnheader "Entitled" [ref=e366]
+                    - columnheader "Used" [ref=e367]
+                    - columnheader "Balance" [ref=e368]
+                - rowgroup [ref=e369]:
+                  - row "Annual Leave 21 days 6 days 15 days remaining" [ref=e370]:
+                    - cell "Annual Leave" [ref=e371]
+                    - cell "21 days" [ref=e372]
+                    - cell "6 days" [ref=e373]
+                    - cell "15 days remaining" [ref=e374]
+                  - row "Sick Leave 12 days 0 days 12 days remaining" [ref=e375]:
+                    - cell "Sick Leave" [ref=e376]
+                    - cell "12 days" [ref=e377]
+                    - cell "0 days" [ref=e378]
+                    - cell "12 days remaining" [ref=e379]
+                  - row "Casual Leave 8 days 1 day 7 days remaining" [ref=e380]:
+                    - cell "Casual Leave" [ref=e381]
+                    - cell "8 days" [ref=e382]
+                    - cell "1 day" [ref=e383]
+                    - cell "7 days remaining" [ref=e384]
+              - paragraph [ref=e385]:
+                - strong [ref=e387]: Key Findings
+              - list [ref=e388]:
+                - listitem [ref=e389]: EMP001 has a balance of 15 days in annual leave, which is available for use.
+                - listitem [ref=e390]: EMP001 has a balance of 12 days in sick leave, which is also available for use.
+                - listitem [ref=e391]: EMP001 has a balance of 7 days in casual leave, which is partially used.
+              - paragraph [ref=e392]:
+                - strong [ref=e394]: Important Notes
+              - paragraph [ref=e395]:
+                - generic [ref=e396]: There are no overdue items or low stock alerts associated with EMP001's leave balances. However, it is recommended that EMP001 reviews their leave usage to ensure they are utilizing their available balance effectively.
+              - paragraph [ref=e397]:
+                - strong [ref=e399]: Business Summary
+                - generic [ref=e400]: Please review and approve the updated leave balances for EMP001 to ensure compliance with company policies and procedures.
+            - generic [ref=e401]:
+              - img [ref=e402]
+              - generic [ref=e404]: "Verify in SAP:"
+              - strong [ref=e405]: PT50
+              - generic [ref=e406]: ·
+              - generic [ref=e407]: "BAPI: BAPI_ABSENCE_GETLIST"
+              - generic [ref=e408]: ·
+              - generic [ref=e409]: "Table: ABSENCE"
+            - button "Copy" [ref=e411] [cursor=pointer]:
+              - img [ref=e412]
+              - text: Copy
+        - generic [ref=e415]:
+          - generic [ref=e416]: S
+          - generic [ref=e418]: What is the budget for cost center CC100?
+        - generic [ref=e419]:
+          - img [ref=e421]
+          - generic [ref=e423]:
+            - group [ref=e424] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e425]
+            - generic [ref=e427]:
+              - paragraph [ref=e428]:
+                - strong [ref=e430]: Budget for Cost Center CC100
+              - paragraph [ref=e431]:
+                - generic [ref=e432]: "The budget for cost center CC100 is as follows:"
+              - table [ref=e434]:
+                - rowgroup [ref=e435]:
+                  - row "Category Value" [ref=e436]:
+                    - columnheader "Category" [ref=e437]:
+                      - strong [ref=e438]: Category
+                    - columnheader "Value" [ref=e439]:
+                      - strong [ref=e440]: Value
+                - rowgroup [ref=e441]:
+                  - row "Budget ₹ 25,000,000.00" [ref=e442]:
+                    - cell "Budget" [ref=e443]
+                    - cell "₹ 25,000,000.00" [ref=e444]
+                  - row "Actual Spend ₹ 18,750,000.00" [ref=e445]:
+                    - cell "Actual Spend" [ref=e446]
+                    - cell "₹ 18,750,000.00" [ref=e447]
+                  - row "Remaining Budget ₹ 6,250,000.00" [ref=e448]:
+                    - cell "Remaining Budget" [ref=e449]
+                    - cell "₹ 6,250,000.00" [ref=e450]
+              - paragraph [ref=e451]:
+                - generic [ref=e452]: Based on the data provided by the 'get_cost_center_budget' tool, it appears that cost center CC100 has a remaining budget of ₹ 6,250,000.00. This represents approximately 25% of the total budget allocated to this cost center.
+              - paragraph [ref=e453]:
+                - strong [ref=e455]: "Key Findings:"
+              - list [ref=e456]:
+                - listitem [ref=e457]: The actual spend is ₹ 18,750,000.00, which is below the budgeted amount.
+                - listitem [ref=e458]: There are no indications of overdue items or low stock in the provided data.
+                - listitem [ref=e459]: However, it's worth noting that the utilization percentage is at 75%, indicating that a significant portion of the budget has been utilized.
+              - paragraph [ref=e460]:
+                - strong [ref=e462]: "Recommendation:"
+              - paragraph [ref=e463]:
+                - generic [ref=e464]: It would be beneficial to review the actual spend and remaining budget regularly to ensure that cost center CC100 is meeting its financial targets.
+            - generic [ref=e465]:
+              - img [ref=e466]
+              - generic [ref=e468]: "Verify in SAP:"
+              - strong [ref=e469]: KS03
+              - generic [ref=e470]: ·
+              - generic [ref=e471]: "BAPI: BAPI_COSTCENTER_GETDETAIL"
+              - generic [ref=e472]: ·
+              - generic [ref=e473]: "Table: CSKS"
+            - button "Copy" [ref=e475] [cursor=pointer]:
+              - img [ref=e476]
+              - text: Copy
+      - generic [ref=e244]:
+        - generic [ref=e245]:
+          - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [active] [ref=e247]
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - button "llama3.2" [ref=e251] [cursor=pointer]:
+                - img [ref=e252]
+                - generic [ref=e255]: llama3.2
+                - img [ref=e256]
+              - generic "Attach file" [ref=e259] [cursor=pointer]:
+                - img [ref=e260]
+              - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e262] [cursor=pointer]:
+                - img [ref=e263]
+              - button "Show suggestions" [ref=e265] [cursor=pointer]:
+                - img [ref=e266]
+            - button "Send message" [disabled] [ref=e269] [cursor=pointer]:
+              - img [ref=e479]
+        - generic [ref=e272]: CLAVIS can make mistakes. Verify important results.

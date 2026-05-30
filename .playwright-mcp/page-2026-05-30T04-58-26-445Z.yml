@@ -1,0 +1,389 @@
+- generic [ref=e87]:
+  - generic [ref=e88]:
+    - generic [ref=e89]:
+      - generic [ref=e273]:
+        - generic [ref=e274]: CLAVIS
+        - generic [ref=e275]: v0.1
+      - button "Collapse sidebar" [ref=e276] [cursor=pointer]:
+        - img [ref=e277]
+    - generic [ref=e278]:
+      - img [ref=e279]
+      - textbox "Search chats" [ref=e282]
+      - generic [ref=e283]: ⌘K
+    - button "+ New chat" [ref=e285] [cursor=pointer]:
+      - generic [ref=e286]: +
+      - text: New chat
+    - generic [ref=e288]: Earlier
+    - generic [ref=e107]:
+      - generic [ref=e303] [cursor=pointer]:
+        - generic [ref=e304]:
+          - generic [ref=e305]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e306]: 85-3bckp92 · 2 msgs · 3m ago
+        - button "Delete" [ref=e307]:
+          - img [ref=e308]
+      - generic [ref=e289] [cursor=pointer]:
+        - generic [ref=e290]:
+          - generic [ref=e291]: Get employee info and leave balance for EMP001
+          - generic [ref=e292]: 28-bhp91ct · 2 msgs · 4m ago
+        - button "Delete" [ref=e293]:
+          - img [ref=e294]
+      - generic [ref=e296] [cursor=pointer]:
+        - generic [ref=e297]:
+          - generic [ref=e298]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e299]: 34-g6c2kb9 · 2 msgs · 5m ago
+        - button "Delete" [ref=e300]:
+          - img [ref=e301]
+      - generic [ref=e310] [cursor=pointer]:
+        - generic [ref=e311]:
+          - generic [ref=e312]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e313]: 73-r0f20an · 2 msgs · 6h ago
+        - button "Delete" [ref=e314]:
+          - img [ref=e315]
+      - generic [ref=e317] [cursor=pointer]:
+        - generic [ref=e318]:
+          - generic [ref=e319]: Show me open purchase orders
+          - generic [ref=e320]: 97-gafagsw · 2 msgs · 6h ago
+        - button "Delete" [ref=e321]:
+          - img [ref=e322]
+      - generic [ref=e324] [cursor=pointer]:
+        - generic [ref=e325]:
+          - generic [ref=e326]: Show me open purchase orders
+          - generic [ref=e327]: 27-4je0px3 · 2 msgs · 6h ago
+        - button "Delete" [ref=e328]:
+          - img [ref=e329]
+    - generic [ref=e136]:
+      - generic [ref=e137]:
+        - generic [ref=e331]: S
+        - generic [ref=e332]:
+          - generic [ref=e333]: System Administrator
+          - generic [ref=e334]: READER
+        - button "Sign out" [ref=e335] [cursor=pointer]:
+          - img [ref=e336]
+      - generic [ref=e339]: 🎭 Mock mode
+  - generic [ref=e147]:
+    - banner [ref=e148]:
+      - generic [ref=e149]:
+        - img [ref=e151]
+        - generic [ref=e157]: CLAVIS
+      - generic [ref=e158]:
+        - generic [ref=e161]: LLM Online
+        - generic [ref=e162]:
+          - generic [ref=e163]: S
+          - generic [ref=e164]:
+            - generic [ref=e165]: System Administrator
+            - generic [ref=e166]: Administrator
+          - button "Sign out" [ref=e167] [cursor=pointer]:
+            - img [ref=e168]
+        - button "Toggle Light/Dark Theme" [active] [ref=e171] [cursor=pointer]:
+          - img [ref=e172]
+        - button "Configuration" [ref=e174] [cursor=pointer]:
+          - img [ref=e175]
+    - generic [ref=e178]:
+      - generic [ref=e179]:
+        - generic [ref=e340]:
+          - generic [ref=e341]: S
+          - generic [ref=e343]: What is the budget vs actual for Cost Center CC200?
+        - generic [ref=e344]:
+          - img [ref=e346]
+          - generic [ref=e348]:
+            - group [ref=e349] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e350]
+            - generic [ref=e352]:
+              - paragraph [ref=e353]:
+                - strong [ref=e355]: Budget vs Actual for Cost Center CC200
+              - paragraph [ref=e356]:
+                - generic [ref=e357]: "Based on the data provided by the 'get_cost_center_budget' tool, here is an analysis of the budget versus actual for Cost Center CC200:"
+              - paragraph [ref=e358]:
+                - strong [ref=e360]: "Key Values:"
+              - list [ref=e482]:
+                - listitem [ref=e483]: "Budget: ₹ 12,000,000"
+                - listitem [ref=e484]: "Actual: ₹ 9,800,000"
+                - listitem [ref=e485]: "Remaining: ₹ 2,200,000"
+                - listitem [ref=e486]: "Utilization Pct: 81.67%"
+              - paragraph [ref=e385]:
+                - strong [ref=e387]: "Comparison:"
+              - table [ref=e488]:
+                - rowgroup [ref=e489]:
+                  - row "Category Budget Actual" [ref=e490]:
+                    - columnheader "Category" [ref=e491]
+                    - columnheader "Budget" [ref=e492]
+                    - columnheader "Actual" [ref=e493]
+                - rowgroup [ref=e494]:
+                  - row "Total ₹ 12,000,000 ₹ 9,800,000" [ref=e495]:
+                    - cell "Total" [ref=e496]
+                    - cell "₹ 12,000,000" [ref=e497]
+                    - cell "₹ 9,800,000" [ref=e498]
+              - paragraph [ref=e392]:
+                - strong [ref=e499]: "Key Findings:"
+              - list [ref=e500]:
+                - listitem [ref=e501]: The actual expenditure for Cost Center CC200 is lower than the budget by ₹ 2,200,000.
+                - listitem [ref=e502]: The utilization percentage is 81.67%, indicating that the cost center has been utilized to a significant extent.
+              - paragraph [ref=e397]:
+                - strong [ref=e503]: "Anomalies and Recommendations:"
+              - list [ref=e504]:
+                - listitem [ref=e505]: There are no overdue items or low stock reported for this cost center.
+                - listitem [ref=e506]: However, it's essential to monitor the remaining budget closely to ensure that it does not impact future financial planning.
+                - listitem [ref=e507]: Considering the high utilization percentage, it may be beneficial to review the cost allocation and ensure that expenses are properly accounted for.
+              - paragraph [ref=e508]:
+                - strong [ref=e510]: "Business Summary:"
+              - paragraph [ref=e511]:
+                - generic [ref=e512]: The actual expenditure for Cost Center CC200 is lower than the budget, indicating a potential opportunity for cost savings. However, it's crucial to maintain close monitoring of the remaining budget to avoid any impact on future financial planning.
+            - generic [ref=e401]:
+              - img [ref=e402]
+              - generic [ref=e404]: "Verify in SAP:"
+              - strong [ref=e405]: KS03
+              - generic [ref=e406]: ·
+              - generic [ref=e407]: "BAPI: BAPI_COSTCENTER_GETDETAIL"
+              - generic [ref=e408]: ·
+              - generic [ref=e409]: "Table: CSKS"
+            - button "Copy" [ref=e411] [cursor=pointer]:
+              - img [ref=e412]
+              - text: Copy
+        - generic [ref=e513]:
+          - generic [ref=e514]: S
+          - generic [ref=e516]: Show me all open purchase orders
+        - generic [ref=e517]:
+          - img [ref=e519]
+          - generic [ref=e521]:
+            - group [ref=e522] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e523]
+            - paragraph [ref=e526]:
+              - generic [ref=e527]:
+                - text: Found
+                - strong [ref=e528]: 15 records
+                - text: from
+                - code [ref=e529]: list_open_purchase_orders
+                - text: .
+              - generic [ref=e530]: Showing all results in the table below.
+            - generic [ref=e531]:
+              - img [ref=e532]
+              - generic [ref=e534]: "Verify in SAP:"
+              - strong [ref=e535]: ME2M
+              - generic [ref=e536]: ·
+              - generic [ref=e537]: "BAPI: BAPI_PO_GETITEMS"
+              - generic [ref=e538]: ·
+              - generic [ref=e539]: "Table: EKKO"
+            - generic [ref=e540]:
+              - generic [ref=e541]:
+                - img [ref=e542]
+                - generic [ref=e544]: 15 records
+                - button "View Larger" [ref=e545] [cursor=pointer]:
+                  - img [ref=e546]
+                  - text: View Larger
+                - button "Visualize" [ref=e550] [cursor=pointer]:
+                  - img [ref=e551]
+                  - text: Visualize
+              - generic [ref=e552]:
+                - generic [ref=e553]:
+                  - generic [ref=e554]: 15 of 15 records
+                  - textbox "Search…" [ref=e555]
+                - table [ref=e557]:
+                  - rowgroup [ref=e558]:
+                    - row "PO ID VENDOR MATERIAL QTY STATUS DELIVERY DATE" [ref=e559]:
+                      - columnheader "PO ID" [ref=e560] [cursor=pointer]
+                      - columnheader "VENDOR" [ref=e561] [cursor=pointer]
+                      - columnheader "MATERIAL" [ref=e562] [cursor=pointer]
+                      - columnheader "QTY" [ref=e563] [cursor=pointer]
+                      - columnheader "STATUS" [ref=e564] [cursor=pointer]
+                      - columnheader "DELIVERY DATE" [ref=e565] [cursor=pointer]
+                  - rowgroup [ref=e566]:
+                    - row "PO3012 HCL Technologies Ltd Laptop Computer Core i7 16GB 512GB SSD 20 OPEN 2025-01-10" [ref=e567]:
+                      - cell "PO3012" [ref=e568]
+                      - cell "HCL Technologies Ltd" [ref=e569]
+                      - cell "Laptop Computer Core i7 16GB 512GB SSD" [ref=e570]
+                      - cell "20" [ref=e571]
+                      - cell "OPEN" [ref=e572]
+                      - cell "2025-01-10" [ref=e573]
+                    - row "PO3010 ABB India Ltd Control Panel Assembly 400V 100A MCC 25 OPEN 2025-01-20" [ref=e574]:
+                      - cell "PO3010" [ref=e575]
+                      - cell "ABB India Ltd" [ref=e576]
+                      - cell "Control Panel Assembly 400V 100A MCC" [ref=e577]
+                      - cell "25" [ref=e578]
+                      - cell "OPEN" [ref=e579]
+                      - cell "2025-01-20" [ref=e580]
+                    - row "PO3013 Tech Mahindra Ltd PLC Siemens S7-1500 CPU 1515-2 PN 5 OPEN 2025-02-28" [ref=e581]:
+                      - cell "PO3013" [ref=e582]
+                      - cell "Tech Mahindra Ltd" [ref=e583]
+                      - cell "PLC Siemens S7-1500 CPU 1515-2 PN" [ref=e584]
+                      - cell "5" [ref=e585]
+                      - cell "OPEN" [ref=e586]
+                      - cell "2025-02-28" [ref=e587]
+                    - row "PO3015 SKF India Ltd Deep Groove Ball Bearing 6308-2Z 40x90x23mm 500 OPEN 2025-03-15" [ref=e588]:
+                      - cell "PO3015" [ref=e589]
+                      - cell "SKF India Ltd" [ref=e590]
+                      - cell "Deep Groove Ball Bearing 6308-2Z 40x90x23mm" [ref=e591]
+                      - cell "500" [ref=e592]
+                      - cell "OPEN" [ref=e593]
+                      - cell "2025-03-15" [ref=e594]
+                    - row "PO3026 Havells India Ltd 3-Phase Contactor 65A 415V AC Coil 200 OPEN 2025-03-30" [ref=e595]:
+                      - cell "PO3026" [ref=e596]
+                      - cell "Havells India Ltd" [ref=e597]
+                      - cell "3-Phase Contactor 65A 415V AC Coil" [ref=e598]
+                      - cell "200" [ref=e599]
+                      - cell "OPEN" [ref=e600]
+                      - cell "2025-03-30" [ref=e601]
+                    - row "PO3011 Tata Consultancy Services Ltd SAP S/4HANA Enterprise License Annual 1 OPEN 2025-03-31" [ref=e602]:
+                      - cell "PO3011" [ref=e603]
+                      - cell "Tata Consultancy Services Ltd" [ref=e604]
+                      - cell "SAP S/4HANA Enterprise License Annual" [ref=e605]
+                      - cell "1" [ref=e606]
+                      - cell "OPEN" [ref=e607]
+                      - cell "2025-03-31" [ref=e608]
+                    - row "PO3016 Thermax Ltd Conveyor Belt EP200/2 1000mm Width 5m 20 OPEN 2025-04-10" [ref=e609]:
+                      - cell "PO3016" [ref=e610]
+                      - cell "Thermax Ltd" [ref=e611]
+                      - cell "Conveyor Belt EP200/2 1000mm Width 5m" [ref=e612]
+                      - cell "20" [ref=e613]
+                      - cell "OPEN" [ref=e614]
+                      - cell "2025-04-10" [ref=e615]
+                    - row "PO3022 Festo India Pvt Ltd Pneumatic Cylinder ISO 15552 100mm Bore 200mm 50 OPEN 2025-04-10" [ref=e616]:
+                      - cell "PO3022" [ref=e617]
+                      - cell "Festo India Pvt Ltd" [ref=e618]
+                      - cell "Pneumatic Cylinder ISO 15552 100mm Bore 200mm" [ref=e619]
+                      - cell "50" [ref=e620]
+                      - cell "OPEN" [ref=e621]
+                      - cell "2025-04-10" [ref=e622]
+                    - row "PO3027 Reliance Industries Ltd Hydraulic Oil Servo 46 ISO VG 46 210L Barrel 1050 OPEN 2025-04-15" [ref=e623]:
+                      - cell "PO3027" [ref=e624]
+                      - cell "Reliance Industries Ltd" [ref=e625]
+                      - cell "Hydraulic Oil Servo 46 ISO VG 46 210L Barrel" [ref=e626]
+                      - cell "1050" [ref=e627]
+                      - cell "OPEN" [ref=e628]
+                      - cell "2025-04-15" [ref=e629]
+                    - row "PO3021 Eaton India Pvt Ltd Variable Frequency Drive 15kW 3Ph 415V 8 OPEN 2025-04-20" [ref=e630]:
+                      - cell "PO3021" [ref=e631]
+                      - cell "Eaton India Pvt Ltd" [ref=e632]
+                      - cell "Variable Frequency Drive 15kW 3Ph 415V" [ref=e633]
+                      - cell "8" [ref=e634]
+                      - cell "OPEN" [ref=e635]
+                      - cell "2025-04-20" [ref=e636]
+                    - row "PO3018 Timken India Ltd Deep Groove Ball Bearing 6308-2Z 40x90x23mm 300 OPEN 2025-04-25" [ref=e637]:
+                      - cell "PO3018" [ref=e638]
+                      - cell "Timken India Ltd" [ref=e639]
+                      - cell "Deep Groove Ball Bearing 6308-2Z 40x90x23mm" [ref=e640]
+                      - cell "300" [ref=e641]
+                      - cell "OPEN" [ref=e642]
+                      - cell "2025-04-25" [ref=e643]
+                    - row "PO3014 Larsen & Toubro Ltd Industrial Robot Arm 6-Axis 20kg Payload 2 OPEN 2025-04-30" [ref=e644]:
+                      - cell "PO3014" [ref=e645]
+                      - cell "Larsen & Toubro Ltd" [ref=e646]
+                      - cell "Industrial Robot Arm 6-Axis 20kg Payload" [ref=e647]
+                      - cell "2" [ref=e648]
+                      - cell "OPEN" [ref=e649]
+                      - cell "2025-04-30" [ref=e650]
+                    - row "PO3030 Siemens India Ltd Safety PLC Siemens S7-1200F CPU 1214FC 4 OPEN 2025-04-30" [ref=e651]:
+                      - cell "PO3030" [ref=e652]
+                      - cell "Siemens India Ltd" [ref=e653]
+                      - cell "Safety PLC Siemens S7-1200F CPU 1214FC" [ref=e654]
+                      - cell "4" [ref=e655]
+                      - cell "OPEN" [ref=e656]
+                      - cell "2025-04-30" [ref=e657]
+                    - row "PO3029 Bosch Ltd SS 304 Flange ANSI B16.5 Class 150 DN50 4Hole 60 OPEN 2025-05-20" [ref=e658]:
+                      - cell "PO3029" [ref=e659]
+                      - cell "Bosch Ltd" [ref=e660]
+                      - cell "SS 304 Flange ANSI B16.5 Class 150 DN50 4Hole" [ref=e661]
+                      - cell "60" [ref=e662]
+                      - cell "OPEN" [ref=e663]
+                      - cell "2025-05-20" [ref=e664]
+                    - row "PO3020 SAP India Pvt Ltd SAP S/4HANA Enterprise License Annual 2 OPEN 2025-06-30" [ref=e665]:
+                      - cell "PO3020" [ref=e666]
+                      - cell "SAP India Pvt Ltd" [ref=e667]
+                      - cell "SAP S/4HANA Enterprise License Annual" [ref=e668]
+                      - cell "2" [ref=e669]
+                      - cell "OPEN" [ref=e670]
+                      - cell "2025-06-30" [ref=e671]
+            - generic [ref=e672]:
+              - button "Copy" [ref=e673] [cursor=pointer]:
+                - img [ref=e674]
+                - text: Copy
+              - button "View Table" [ref=e677] [cursor=pointer]:
+                - img [ref=e678]
+                - text: View Table
+              - button "Visualize" [ref=e680] [cursor=pointer]:
+                - img [ref=e681]
+                - text: Visualize
+        - generic [ref=e864]:
+          - generic [ref=e865]: S
+          - generic [ref=e867]: Visualize open purchase orders by vendor
+        - generic [ref=e881]:
+          - img [ref=e883]
+          - generic [ref=e885]:
+            - group [ref=e886] [cursor=pointer]:
+              - generic "› Reasoning — 1 step" [ref=e887]
+              - generic [ref=e985]: Generating report and charts...
+            - paragraph [ref=e890]:
+              - generic [ref=e891]:
+                - text: Here is the
+                - strong [ref=e892]: Open Purchase Orders by Vendor
+                - text: "as a bar chart:"
+            - generic [ref=e893]:
+              - generic [ref=e894]:
+                - generic [ref=e895]: Open Purchase Orders by Vendor
+                - generic [ref=e896]: Bar Chart
+              - generic [ref=e898]:
+                - generic [ref=e899]:
+                  - generic "HCL Technologies Ltd" [ref=e900]
+                  - generic [ref=e903]: 1 POs
+                - generic [ref=e904]:
+                  - generic "ABB India Ltd" [ref=e905]
+                  - generic [ref=e908]: 1 POs
+                - generic [ref=e909]:
+                  - generic "Tech Mahindra Ltd" [ref=e910]
+                  - generic [ref=e913]: 1 POs
+                - generic [ref=e914]:
+                  - generic "SKF India Ltd" [ref=e915]
+                  - generic [ref=e918]: 1 POs
+                - generic [ref=e919]:
+                  - generic "Havells India Ltd" [ref=e920]
+                  - generic [ref=e923]: 1 POs
+                - generic [ref=e924]:
+                  - generic "Tata Consultancy Services Ltd" [ref=e925]
+                  - generic [ref=e928]: 1 POs
+                - generic [ref=e929]:
+                  - generic "Thermax Ltd" [ref=e930]
+                  - generic [ref=e933]: 1 POs
+                - generic [ref=e934]:
+                  - generic "Festo India Pvt Ltd" [ref=e935]
+                  - generic [ref=e938]: 1 POs
+                - generic [ref=e939]:
+                  - generic "Reliance Industries Ltd" [ref=e940]
+                  - generic [ref=e943]: 1 POs
+                - generic [ref=e944]:
+                  - generic "Eaton India Pvt Ltd" [ref=e945]
+                  - generic [ref=e948]: 1 POs
+                - generic [ref=e949]:
+                  - generic "Timken India Ltd" [ref=e950]
+                  - generic [ref=e953]: 1 POs
+                - generic [ref=e954]:
+                  - generic "Larsen & Toubro Ltd" [ref=e955]
+                  - generic [ref=e958]: 1 POs
+                - generic [ref=e959]:
+                  - generic "Siemens India Ltd" [ref=e960]
+                  - generic [ref=e963]: 1 POs
+                - generic [ref=e964]:
+                  - generic "Bosch Ltd" [ref=e965]
+                  - generic [ref=e968]: 1 POs
+                - generic [ref=e969]:
+                  - generic "SAP India Pvt Ltd" [ref=e970]
+                  - generic [ref=e973]: 1 POs
+            - button "Copy" [ref=e975] [cursor=pointer]:
+              - img [ref=e976]
+              - text: Copy
+      - generic [ref=e244]:
+        - generic [ref=e245]:
+          - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [ref=e247]
+          - generic [ref=e248]:
+            - generic [ref=e249]:
+              - button "llama3.2" [ref=e251] [cursor=pointer]:
+                - img [ref=e252]
+                - generic [ref=e255]: llama3.2
+                - img [ref=e256]
+              - generic "Attach file" [ref=e259] [cursor=pointer]:
+                - img [ref=e260]
+              - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e262] [cursor=pointer]:
+                - img [ref=e263]
+              - button "Show suggestions" [ref=e265] [cursor=pointer]:
+                - img [ref=e266]
+            - button "Send message" [disabled] [ref=e269] [cursor=pointer]:
+              - img [ref=e979]
+        - generic [ref=e272]: CLAVIS can make mistakes. Verify important results.
