@@ -1703,20 +1703,32 @@ function TypingIndicator() {
 
 // ─── StreamingMessageRow ─────────────────────────────────────────────────────
 
-function StreamingMessageRow({ msg }) {
+function StreamingMessageRow({ msg, onViewData, onVisualizeData }) {
   return (
     <div className="msg-row bot">
-      <div className="msg-avatar bot-av">AI</div>
+      <div className="msg-avatar bot-av">
+        <Icons.clavis />
+      </div>
       <div className="msg-body">
+
+        {/* Animated reasoning step track */}
         {msg.status_steps.length > 0 && (
-          <div className="stream-steps">
-            {msg.status_steps.map((step, i) => (
-              <div key={i} className={`stream-step ${i === msg.status_steps.length - 1 ? 'active' : 'done'}`}>
-                <span className="step-dot" />{step}
-              </div>
-            ))}
+          <div className="step-track">
+            {msg.status_steps.map((step, i) => {
+              const isActive = i === msg.status_steps.length - 1
+              return (
+                <div key={i} className="step-track-item">
+                  <div className="step-dot-wrap">
+                    <div className={isActive ? 'step-dot-active' : 'step-dot-done'} />
+                  </div>
+                  <span className={`step-track-text ${isActive ? 'active' : ''}`}>{step}</span>
+                </div>
+              )
+            })}
           </div>
         )}
+
+        {/* Streaming content */}
         {msg.content ? (
           <div className="msg-bubble" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
             {msg.content}
@@ -1726,14 +1738,17 @@ function StreamingMessageRow({ msg }) {
             <ShiningText text="clavis is thinking..." />
           </div>
         )}
+
+        {/* Live table (no action buttons while loading) */}
         {msg.tableData && (
-          <DataTable
-            columns={msg.tableData.columns}
-            rows={msg.tableData.rows}
-            total={msg.tableData.total}
+          <InlineTableHeader
+            tableData={msg.tableData}
+            onViewData={onViewData}
+            onVisualizeData={onVisualizeData}
             loading={msg.tableData.loading}
           />
         )}
+
         {(msg.tool_called === "autonomous_agent" || msg.tool_called === "action_plan" || msg.action_plan) && (
           <Plan planData={msg.action_plan} />
         )}
