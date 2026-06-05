@@ -16,7 +16,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
  */
 export async function sendMessage(
   text,
-  { token, refreshToken, onTokenRefresh, sessionId = 'default', clarificationAnswer = null } = {}
+  { token, onTokenRefresh, sessionId = 'default', clarificationAnswer = null } = {}
 ) {
   const store = useChatStore.getState()
   store.resetStreamState()
@@ -105,6 +105,7 @@ export async function sendMessage(
       }
     }
   } catch (err) {
+    console.error('Stream processing error:', err)
     store.setStreamError('Connection lost. Please try again.')
   } finally {
     store.setIsRunning(false)

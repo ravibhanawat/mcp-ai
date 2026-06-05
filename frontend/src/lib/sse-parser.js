@@ -32,8 +32,8 @@ export async function* parseSSE(response) {
       if (!data) continue
       try {
         yield { type: eventType, payload: JSON.parse(data) }
-      } catch {
-        // skip malformed frame silently
+      } catch (err) {
+        console.warn('SSE: failed to parse frame', { data, error: err.message })
       }
     }
   }
