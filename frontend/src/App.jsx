@@ -3,8 +3,14 @@ import './App.css'
 import ReportWidget from './ReportWidget'
 import { AbapReviewWidget, AbapCodeWidget } from './AbapWidget'
 import ReceiptWidget from './ReceiptWidget'
+import useChatStore from './stores/chat-store.js'
+import { sendMessage as streamSend } from './lib/ask-stream.js'
 
-const API = import.meta.env.VITE_API_URL || '/api'
+let rawAPI = import.meta.env.VITE_API_URL || '/api'
+if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
+  rawAPI = (rawAPI.includes('localhost') || rawAPI.includes('127.0.0.1')) ? `http://${rawAPI}` : `https://${rawAPI}`
+}
+const API = rawAPI.replace(/\/$/, '')
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -2806,15 +2812,19 @@ function getModelIcon(modelName) {
 
 export default function App() {
   const [messages, setMessages] = useState([])
-  const [streamingMsg, setStreamingMsg] = useState(null)
-  // Ref tracks streaming content synchronously to avoid stale closure in done handler
-  const streamingRef = useRef({ content: '', status_steps: [] })
-  const rafRef = useRef(null)
-  // Ref tracks streaming table data — updated without re-renders, flushed via RAF
-  const tableRef = useRef(null)
-  const tableRafRef = useRef(null)
+  const {
+    isRunning,
+    streamingAnswer,
+    currentPhase,
+    currentRows,
+    streamError,
+    dataPanel,
+    setDataPanel,
+    setClarification,
+    clarification,
+    lastDone,
+  } = useChatStore()
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
   const [model, setModel] = useState('llama3.2')
   const [ollamaStatus, setOllamaStatus] = useState('checking')
   const [sapMode, setSapMode] = useState('mock')
@@ -2904,7 +2914,8 @@ export default function App() {
     localStorage.removeItem('sap_agent_token')
     localStorage.removeItem('sap_agent_refresh_token')
     localStorage.removeItem('sap_agent_user')
-    setAuthToken(null); setCurrentUser(null); setMessages([]); setStreamingMsg(null); streamingRef.current = { content: '', status_steps: [] }
+    setAuthToken(null); setCurrentUser(null); setMessages([])
+    useChatStore.getState().resetStreamState()
     setConversations([]); setSessionId('default'); setViewMode('initial')
     hashLoadedRef.current = false; window.location.hash = '#/'
   }, [])
@@ -2932,7 +2943,7 @@ export default function App() {
     apiFetch('/tools').then(r => { if (r.status === 401) { handleLogout(); return } return r.json() }).then(d => d).catch(() => { })
   }, [authToken, needsLogin, handleLogout])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingMsg, loading])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isRunning, streamingAnswer])
 
   // ── History helpers ─────────────────────────────────────────────────────────
   const loadConversations = useCallback(async () => {
@@ -2953,15 +2964,12 @@ export default function App() {
     const newSid = _makeSessionId(userId)
     localStorage.setItem(`sap_session_${userId}`, newSid)
     setSessionId(newSid)
-    setMessages([]); setStreamingMsg(null); setViewMode('initial')
+    setMessages([]); useChatStore.getState().resetStreamState(); setViewMode('initial')
     window.location.hash = '#/'
   }, [currentUser])
 
   const handleLoadConversation = useCallback(async (sid) => {
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
-    if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
-    setStreamingMsg(null)
-    setLoading(false)
+    useChatStore.getState().resetStreamState()
     try {
       const res = await apiFetch(`/conversations/${encodeURIComponent(sid)}/messages`)
       if (!res.ok) return
@@ -3007,7 +3015,7 @@ export default function App() {
         const sid = decodeURIComponent(hash.replace('#/chat/', ''))
         if (sid) handleLoadConversation(sid)
       } else {
-        setMessages([]); setStreamingMsg(null); setViewMode('initial')
+        setMessages([]); useChatStore.getState().resetStreamState(); setViewMode('initial')
       }
     }
     window.addEventListener('hashchange', onHashChange)
@@ -3034,10 +3042,11 @@ export default function App() {
   const userInitial = currentUser ? (currentUser.full_name || currentUser.user_id)[0].toUpperCase() : 'U'
 
   const sendResearch = useCallback(async (text) => {
-    const msg = text.trim(); if (!msg || loading) return
+    const msg = text.trim(); if (!msg || isRunning) return
     setViewMode('conversation')
     setMessages(p => [...p, { role: 'user', content: msg, userInitial }])
-    setInput(''); setLoading(true)
+    setInput('')
+    useChatStore.getState().setIsRunning(true)
     if (inputRef.current) inputRef.current.style.height = 'auto'
     try {
       const res = await apiFetch('/research', { method: 'POST', body: JSON.stringify({ query: msg }) })
@@ -3050,154 +3059,36 @@ export default function App() {
         request_id: data.request_id,
       }])
     } catch { setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the CLAVIS API.' }]) }
-    finally { setLoading(false); setTimeout(() => inputRef.current?.focus(), 50) }
-  }, [loading, handleLogout, userInitial])
+    finally { useChatStore.getState().setIsRunning(false); setTimeout(() => inputRef.current?.focus(), 50) }
+  }, [isRunning, handleLogout, userInitial])
 
   const sendMessage = useCallback(async (text) => {
     if (researchMode) return sendResearch(text)
-    const msg = text.trim(); if (!msg || loading) return
+    const msg = text.trim()
+    if (!msg || isRunning) return
+
     setViewMode('conversation')
-    setMessages(p => [...p, { role: 'user', content: msg, userInitial }])
-    setInput(''); setLoading(true)
+    setInput('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
-    if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
-    streamingRef.current = { content: '', status_steps: [] }
-    tableRef.current = null
-    setStreamingMsg({ content: '', status_steps: [] })
 
-    try {
-      const token = localStorage.getItem('sap_agent_token')
-      const headers = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      let res = await fetch(`${API}/chat/stream`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ message: msg, model, session_id: sessionId }),
-      })
-
-      if (res.status === 401) {
+    const token = localStorage.getItem('sap_agent_token')
+    await streamSend(msg, {
+      token,
+      onTokenRefresh: async () => {
         const refreshed = await refreshAccessToken()
-        if (!refreshed) { handleLogout(); setStreamingMsg(null); return }
-        headers['Authorization'] = `Bearer ${localStorage.getItem('sap_agent_token')}`
-        res = await fetch(`${API}/chat/stream`, {
-          method: 'POST', headers,
-          body: JSON.stringify({ message: msg, model, session_id: sessionId }),
-        })
-      }
+        if (!refreshed) { handleLogout(); return null }
+        return localStorage.getItem('sap_agent_token')
+      },
+      sessionId: sessionId || 'default',
+    })
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setStreamingMsg(null)
-        setMessages(p => [...p, { role: 'bot', content: `Error: ${data.detail || 'Unknown error'}` }])
-        return
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        // SSE events are delimited by double newline
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() // keep incomplete trailing chunk
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let eventType = 'message'
-          let dataStr = ''
-          for (const line of lines) {
-            if (line.startsWith('event: ')) eventType = line.slice(7).trim()
-            if (line.startsWith('data: ')) dataStr = line.slice(6).trim()
-          }
-          if (!dataStr) continue
-          let payload
-          try { payload = JSON.parse(dataStr) } catch { continue }
-
-          if (eventType === 'status') {
-            streamingRef.current.status_steps = [...streamingRef.current.status_steps, payload.step]
-            setStreamingMsg(prev => prev ? ({ ...prev, status_steps: streamingRef.current.status_steps }) : prev)
-
-          } else if (eventType === 'text_delta') {
-            streamingRef.current.content += payload.delta || ''
-            if (!rafRef.current) {
-              rafRef.current = requestAnimationFrame(() => {
-                rafRef.current = null
-                setStreamingMsg(prev => prev ? ({ ...prev, content: streamingRef.current.content }) : prev)
-              })
-            }
-
-          } else if (eventType === 'table_start') {
-            tableRef.current = { columns: payload.columns, rows: [], total: payload.total, loading: true }
-            setStreamingMsg(prev => prev ? ({ ...prev, tableData: tableRef.current }) : prev)
-
-          } else if (eventType === 'table_rows') {
-            if (tableRef.current) {
-              tableRef.current = { ...tableRef.current, rows: [...tableRef.current.rows, ...payload.rows] }
-              if (!tableRafRef.current) {
-                tableRafRef.current = requestAnimationFrame(() => {
-                  tableRafRef.current = null
-                  setStreamingMsg(prev => prev ? ({ ...prev, tableData: tableRef.current }) : prev)
-                })
-              }
-            }
-
-          } else if (eventType === 'table_end') {
-            if (tableRef.current) {
-              tableRef.current = { ...tableRef.current, loading: false }
-              setStreamingMsg(prev => prev ? ({ ...prev, tableData: tableRef.current }) : prev)
-            }
-
-          } else if (eventType === 'done') {
-            if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
-            if (tableRafRef.current) { cancelAnimationFrame(tableRafRef.current); tableRafRef.current = null }
-            const finalTableData = tableRef.current ? { ...tableRef.current, loading: false } : null
-            const finalMsg = {
-              role: 'bot',
-              content: streamingRef.current.content,
-              status_steps: streamingRef.current.status_steps,
-              tool_called: payload.tool_called || null,
-              tool_result: payload.tool_result || null,
-              sap_source: payload.sap_source || null,
-              report: payload.report || null,
-              abap_check: payload.abap_check || null,
-              abap_code: payload.abap_code || null,
-              tableData: finalTableData,
-              userQuery: msg,
-            }
-            setStreamingMsg(null)
-            setMessages(p => [...p, finalMsg])
-            if (payload.show_visualization && finalTableData) {
-              setModalData({ ...finalTableData, title: msg.slice(0, 60) })
-              setModalTab('chart')
-              setShowDataModal(true)
-            }
-            loadConversations()
-
-          } else if (eventType === 'error') {
-            setStreamingMsg(null)
-            setMessages(p => [...p, { role: 'bot', content: `Error: ${payload.message || 'Unknown error'}` }])
-          }
-        }
-      }
-    } catch {
-      setStreamingMsg(null)
-      setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the CLAVIS API. Make sure the server is running on port 8000.' }])
-    } finally {
-      setLoading(false)
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [loading, model, handleLogout, researchMode, sendResearch, userInitial, sessionId, loadConversations])
+    loadConversations()
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }, [isRunning, researchMode, sendResearch, handleLogout, sessionId, loadConversations])
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }
   const handleReset = async () => {
-    setMessages([]); setStreamingMsg(null)
+    setMessages([]); useChatStore.getState().resetStreamState()
     try { await apiFetch('/reset', { method: 'POST', body: JSON.stringify({ message: '', model, session_id: sessionId }) }) } catch { }
   }
 
@@ -3433,14 +3324,24 @@ export default function App() {
                   onVisualizeData={handleVisualizeData} 
                 />
               ))}
-              {streamingMsg && (
-                <StreamingMessageRow 
-                  msg={streamingMsg} 
-                  onViewData={handleViewData} 
-                  onVisualizeData={handleVisualizeData} 
+              {isRunning && (
+                <StreamingMessageRow
+                  msg={{
+                    content: streamingAnswer,
+                    status_steps: currentPhase ? [currentPhase] : [],
+                    tableData: currentRows ? { columns: currentRows.columns, rows: currentRows.rows, total: currentRows.row_count, loading: false } : null,
+                  }}
+                  onViewData={handleViewData}
+                  onVisualizeData={handleVisualizeData}
                 />
               )}
-              {!streamingMsg && loading && <TypingIndicator />}
+              {streamError && (
+                <div className="msg-row bot-row">
+                  <div className="msg-bubble bot-bubble" style={{ color: 'var(--error, #dc2626)' }}>
+                    ⚠ {streamError}
+                  </div>
+                </div>
+              )}}
               <div ref={bottomRef} />
             </div>
           )}
@@ -3462,7 +3363,7 @@ export default function App() {
                     adjustInputHeight()
                   }}
                   onKeyDown={handleKeyDown}
-                  disabled={loading}
+                  disabled={isRunning}
                 />
               </div>
 
@@ -3565,16 +3466,16 @@ export default function App() {
                   {/* Send Button */}
                   <button
                     type="button"
-                    className={`prompt-send-btn ${input.trim() && !loading ? 'active' : ''}`}
+                    className={`prompt-send-btn ${input.trim() && !isRunning ? 'active' : ''}`}
                     onClick={() => {
-                      if (input.trim() && !loading) {
+                      if (input.trim() && !isRunning) {
                         sendMessage(input)
                       }
                     }}
-                    disabled={!input.trim() || loading}
+                    disabled={!input.trim() || isRunning}
                     title="Send message"
                   >
-                    {loading ? (
+                    {isRunning ? (
                       <div className="spinner dark" />
                     ) : (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
