@@ -1058,7 +1058,12 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         except Exception:
             yield self._friendly_fallback(tool_name, tool_result)
 
-    async def chat_stream(self, user_message: str, allowed_tools: set | None = None):
+    async def chat_stream(
+        self,
+        user_message: str,
+        allowed_tools: set | None = None,
+        clarification_answer: str | None = None,
+    ):
         """
         Async generator that yields SSE-formatted strings for the streaming chat endpoint.
         Mirrors the 5-tier routing of chat() but emits status events at each decision point
@@ -1072,15 +1077,41 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         def _sse(event_type: str, payload: dict) -> str:
             return f"event: {event_type}\ndata: {json.dumps(payload, cls=_DecimalEncoder)}\n\n"
 
+        if clarification_answer:
+            user_message = f"{user_message}\n[Clarification: {clarification_answer}]"
+
+        def _needs_clarification(msg: str) -> dict | None:
+            msg_lower = msg.lower()
+            if any(kw in msg_lower for kw in ("invoice", "payment", "purchase order", "vendor bill")) \
+                    and not any(kw in msg_lower for kw in ("today", "this week", "this month", "last", "since", "from", "between", "year", "quarter")):
+                return {
+                    "question": "Which time period should I search?",
+                    "options": ["This month", "Last 3 months", "This year", "All time"],
+                }
+            if any(kw in msg_lower for kw in ("customer detail", "vendor detail", "customer profile")) \
+                    and not any(c.isupper() for c in msg):
+                return {
+                    "question": "Which customer or vendor are you looking for?",
+                    "options": None,
+                }
+            return None
+
+        # Skip clarification if caller already provided an answer
+        if not clarification_answer:
+            _clarify = _needs_clarification(user_message)
+            if _clarify:
+                yield _sse("clarify", _clarify)
+                return
+
         # ── 1. Autonomous / research intercept ────────────────────────────────
         if is_autonomous_query(user_message):
-            yield _sse("status", {"step": "Autonomous agent activated — running multi-step analysis...", "phase": "routing"})
+            yield _sse("status", {"step": "Autonomous agent activated — running multi-step analysis...", "phase": "routing_query"})
             try:
                 result = await asyncio.to_thread(self.autonomous, user_message, allowed_tools)
                 response_text, tool_called, tool_result = result
             except Exception:
                 response_text, tool_called, tool_result = "An error occurred during autonomous analysis.", None, None
-            yield _sse("text_delta", {"delta": response_text})
+            yield _sse("answer", {"delta": response_text})
             yield _sse("done", {
                 "tool_called": tool_called, "tool_result": tool_result,
                 "sap_source": None, "report": None, "abap_check": None, "abap_code": None,
@@ -1088,13 +1119,13 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             return
 
         if is_auto_research_query(user_message):
-            yield _sse("status", {"step": "Auto-research mode — chaining SAP tools...", "phase": "routing"})
+            yield _sse("status", {"step": "Auto-research mode — chaining SAP tools...", "phase": "routing_query"})
             try:
                 result = await asyncio.to_thread(self.auto_research, user_message, allowed_tools)
                 response_text, tool_called, tool_result = result
             except Exception:
                 response_text, tool_called, tool_result = "An error occurred during auto-research.", None, None
-            yield _sse("text_delta", {"delta": response_text})
+            yield _sse("answer", {"delta": response_text})
             yield _sse("done", {
                 "tool_called": tool_called, "tool_result": tool_result,
                 "sap_source": None, "report": None, "abap_check": None, "abap_code": None,
@@ -1113,18 +1144,21 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                 system_prompt += "CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with natural language text."
 
         # ── 2. Deterministic regex router ─────────────────────────────────────
-        yield _sse("status", {"step": "Routing query via SAP pattern matcher...", "phase": "routing"})
+        yield _sse("status", {"step": "Routing query via SAP pattern matcher...", "phase": "routing_query"})
+        yield _sse("intent", {"modules": [], "confidence": 0.9, "routing": "pattern_match"})
         tool_call = self._infer_tool_from_query(user_message)
 
         if tool_call and self._is_valid_tool_call(tool_call):
             if allowed_tools is not None and tool_call["name"] not in allowed_tools:
-                yield _sse("text_delta", {"delta": f"Access denied: your role does not permit the '{tool_call['name']}' tool."})
+                yield _sse("answer", {"delta": f"Access denied: your role does not permit the '{tool_call['name']}' tool."})
                 yield _sse("done", {"tool_called": None, "tool_result": None, "sap_source": None, "report": None, "abap_check": None, "abap_code": None})
                 return
 
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
-            yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "tool_call", "tool": tool_name})
+            _sap_module = tool_name.split("_")[0].upper() if "_" in tool_name else tool_name.upper()
+            yield _sse("intent", {"modules": [_sap_module], "confidence": 1.0, "routing": "confirmed"})
+            yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "calling_tool", "tool": tool_name})
 
             tool_result = await asyncio.to_thread(execute_tool, tool_name, tool_params)
             sap_source  = tool_result.get("sap_source") or get_sap_source(tool_name)
@@ -1139,16 +1173,16 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                     f"Showing all results in the table below."
                 )
                 full_text = summary
-                yield _sse("text_delta", {"delta": summary})
-                yield _sse("status", {"step": f"Streaming {total} records...", "phase": "formatting"})
+                yield _sse("answer", {"delta": summary})
+                yield _sse("status", {"step": f"Streaming {total} records...", "phase": "processing"})
                 async for tbl_event in self._stream_tool_table(tool_name, tool_result, list_rows):
                     yield tbl_event
             else:
-                yield _sse("status", {"step": "Formatting response with LLM...", "phase": "formatting"})
+                yield _sse("status", {"step": "Formatting response with LLM...", "phase": "processing"})
                 full_text = ""
                 async for token in self._format_tool_response_stream(user_message, tool_name, tool_result):
                     full_text += token
-                    yield _sse("text_delta", {"delta": token})
+                    yield _sse("answer", {"delta": token})
 
             if not self._use_mlx:
                 self.conversation_history.append({"role": "user", "content": user_message})
@@ -1164,7 +1198,8 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             return
 
         # ── 3. LLM-based routing ───────────────────────────────────────────────
-        yield _sse("status", {"step": "Sending to LLM for intent classification...", "phase": "llm_routing"})
+        yield _sse("status", {"step": "Sending to LLM for intent classification...", "phase": "routing_query"})
+        yield _sse("intent", {"modules": [], "confidence": 0.7, "routing": "llm_classification"})
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self.conversation_history)
         messages.append({"role": "user", "content": user_message})
@@ -1174,13 +1209,15 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         tool_call = self._extract_tool_call(llm_response)
         if tool_call and self._is_valid_tool_call(tool_call):
             if allowed_tools is not None and tool_call["name"] not in allowed_tools:
-                yield _sse("text_delta", {"delta": f"Access denied: your role does not permit the '{tool_call['name']}' tool."})
+                yield _sse("answer", {"delta": f"Access denied: your role does not permit the '{tool_call['name']}' tool."})
                 yield _sse("done", {"tool_called": None, "tool_result": None, "sap_source": None, "report": None, "abap_check": None, "abap_code": None})
                 return
 
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
-            yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "tool_call", "tool": tool_name})
+            _sap_module = tool_name.split("_")[0].upper() if "_" in tool_name else tool_name.upper()
+            yield _sse("intent", {"modules": [_sap_module], "confidence": 1.0, "routing": "confirmed"})
+            yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "calling_tool", "tool": tool_name})
 
             tool_result = await asyncio.to_thread(execute_tool, tool_name, tool_params)
             sap_source  = tool_result.get("sap_source") or get_sap_source(tool_name)
@@ -1194,16 +1231,16 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                     f"Showing all results in the table below."
                 )
                 full_text = summary
-                yield _sse("text_delta", {"delta": summary})
-                yield _sse("status", {"step": f"Streaming {total} records...", "phase": "formatting"})
+                yield _sse("answer", {"delta": summary})
+                yield _sse("status", {"step": f"Streaming {total} records...", "phase": "processing"})
                 async for tbl_event in self._stream_tool_table(tool_name, tool_result, list_rows):
                     yield tbl_event
             else:
-                yield _sse("status", {"step": "Formatting response with LLM...", "phase": "formatting"})
+                yield _sse("status", {"step": "Formatting response with LLM...", "phase": "processing"})
                 full_text = ""
                 async for token in self._format_tool_response_stream(user_message, tool_name, tool_result):
                     full_text += token
-                    yield _sse("text_delta", {"delta": token})
+                    yield _sse("answer", {"delta": token})
 
             if not self._use_mlx:
                 self.conversation_history.append({"role": "user", "content": user_message})
@@ -1226,12 +1263,12 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                 self.conversation_history.append({"role": "assistant", "content": llm_response})
                 if len(self.conversation_history) > 20:
                     self.conversation_history = self.conversation_history[-20:]
-            yield _sse("text_delta", {"delta": llm_response})
+            yield _sse("answer", {"delta": llm_response})
             yield _sse("done", {"tool_called": "action_plan", "tool_result": action_plan, "sap_source": None, "report": None, "abap_check": None, "abap_code": None})
             return
 
         # ── 4. Conversational / cloud response ────────────────────────────────
-        yield _sse("status", {"step": "Generating conversational response...", "phase": "conversational"})
+        yield _sse("status", {"step": "Generating conversational response...", "phase": "streaming_answer"})
         cloud_response = self._call_cloud_primary(messages)
         final_response = cloud_response if cloud_response else llm_response
 
@@ -1244,6 +1281,6 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         # Stream the cloud/llm response in chunks for better UX
         chunk_size = 20
         for i in range(0, len(final_response), chunk_size):
-            yield _sse("text_delta", {"delta": final_response[i:i + chunk_size]})
+            yield _sse("answer", {"delta": final_response[i:i + chunk_size]})
 
         yield _sse("done", {"tool_called": None, "tool_result": None, "sap_source": None, "report": None, "abap_check": None, "abap_code": None})

@@ -356,6 +356,7 @@ class ChatRequest(BaseModel):
     message: str
     model: str = "llama3.2"
     session_id: str = "default"
+    clarification_answer: str | None = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -815,7 +816,7 @@ async def chat_stream(
 ):
     """
     SSE streaming version of /chat.
-    Yields server-sent events: status, text_delta, done, error.
+    Yields server-sent events: status, answer, done, error.
     Compatible with fetch() ReadableStream on the frontend.
     """
     import asyncio
@@ -844,6 +845,7 @@ async def chat_stream(
         t_start            = time.monotonic()
         # Accumulate streamed table rows so large datasets persist correctly
         _streamed_rows     = []
+        _streamed_columns  = []
 
         # ── Visualization intent detection ────────────────────────────────────
         _VIZ_KEYWORDS = {
@@ -877,7 +879,7 @@ async def chat_stream(
                         f"See the code panel below. Copy it and paste into SE38."
                     )
                     full_text = response_text
-                    yield _sse("text_delta", {"delta": response_text})
+                    yield _sse("answer", {"delta": response_text})
                 except Exception:
                     _logger.exception("ABAP code generation failed")
                     abap_code_payload = None
@@ -886,6 +888,8 @@ async def chat_stream(
                     "sap_source": None, "report": None,
                     "abap_check": None, "abap_code": abap_code_payload,
                     "show_visualization": False,
+                    "duration_ms": int((time.monotonic() - t_start) * 1000),
+                    "model": body.model,
                 })
                 return
 
@@ -923,7 +927,7 @@ async def chat_stream(
                             f"See the review panel below."
                         )
                         full_text = response_text
-                        yield _sse("text_delta", {"delta": response_text})
+                        yield _sse("answer", {"delta": response_text})
                     except Exception:
                         _logger.exception("ABAP syntax check failed")
                         abap_check_payload = None
@@ -932,6 +936,8 @@ async def chat_stream(
                         "sap_source": None, "report": None,
                         "abap_check": abap_check_payload, "abap_code": None,
                         "show_visualization": False,
+                        "duration_ms": int((time.monotonic() - t_start) * 1000),
+                        "model": body.model,
                     })
                     return
 
@@ -946,12 +952,14 @@ async def chat_stream(
                         response_text = report_reply(body.message, report_payload)
                         tool_called   = "report_agent"
                         full_text     = response_text
-                        yield _sse("text_delta", {"delta": response_text})
+                        yield _sse("answer", {"delta": response_text})
                         yield _sse("done", {
                             "tool_called": tool_called, "tool_result": None,
                             "sap_source": None, "report": report_payload,
                             "abap_check": None, "abap_code": None,
                             "show_visualization": _show_viz,
+                            "duration_ms": int((time.monotonic() - t_start) * 1000),
+                            "model": body.model,
                         })
                         return
                 except Exception:
@@ -959,7 +967,11 @@ async def chat_stream(
                     report_payload = None
 
             # ── Main agent streaming path ─────────────────────────────────────
-            async for event_str in agent.chat_stream(body.message, allowed_tools=allowed_tools):
+            async for event_str in agent.chat_stream(
+                body.message,
+                allowed_tools=allowed_tools,
+                clarification_answer=body.clarification_answer,
+            ):
                 # Intercept events to extract metadata for audit logging and history
                 if event_str.startswith("event: done"):
                     try:
@@ -969,11 +981,13 @@ async def chat_stream(
                         tool_result  = done_data.get("tool_result")
                         sap_source   = done_data.get("sap_source")
                         done_data["show_visualization"] = _show_viz
+                        done_data["duration_ms"] = int((time.monotonic() - t_start) * 1000)
+                        done_data["model"] = body.model
                         yield f"event: done\ndata: {json.dumps(done_data, cls=_JsonEncoder)}\n\n"
                     except Exception:
                         yield event_str
                     continue
-                elif event_str.startswith("event: text_delta"):
+                elif event_str.startswith("event: answer"):
                     try:
                         data_line = next(l for l in event_str.split("\n") if l.startswith("data:"))
                         full_text += json.loads(data_line[5:]).get("delta", "")
@@ -987,12 +1001,28 @@ async def chat_stream(
                             status_steps.append(step)
                     except Exception:
                         pass
+                elif event_str.startswith("event: table_start"):
+                    try:
+                        data_line = next(l for l in event_str.split("\n") if l.startswith("data:"))
+                        _streamed_columns = json.loads(data_line[5:]).get("columns", [])
+                    except Exception:
+                        pass
                 elif event_str.startswith("event: table_rows"):
                     try:
                         data_line = next(l for l in event_str.split("\n") if l.startswith("data:"))
                         _streamed_rows.extend(json.loads(data_line[5:]).get("rows", []))
                     except Exception:
                         pass
+                elif event_str.startswith("event: table_end"):
+                    yield event_str
+                    if _streamed_columns or _streamed_rows:
+                        yield _sse("rows", {
+                            "columns": _streamed_columns,
+                            "rows": _streamed_rows,
+                            "row_count": len(_streamed_rows),
+                            "truncated": False,
+                        })
+                    continue
 
                 # Check RBAC on tool used
                 if (
