@@ -867,7 +867,7 @@ async def chat_stream(
             if _gen_match:
                 _gen_description = _gen_match.group(1).strip()
                 status_steps.append("Generating ABAP code...")
-                yield _sse("status", {"step": "Generating ABAP code...", "phase": "tool_call", "tool": "generate_abap_code"})
+                yield _sse("status", {"step": "Generating ABAP code...", "phase": "calling_tool", "tool": "generate_abap_code"})
                 try:
                     from modules.abap import generate_abap_code
                     abap_code_payload = await asyncio.to_thread(generate_abap_code, _gen_description)
@@ -909,7 +909,7 @@ async def chat_stream(
                         _code_to_check = body.message.strip()
                 if _code_to_check:
                     status_steps.append("Analyzing ABAP syntax...")
-                    yield _sse("status", {"step": "Analyzing ABAP syntax...", "phase": "tool_call", "tool": "analyze_abap_syntax"})
+                    yield _sse("status", {"step": "Analyzing ABAP syntax...", "phase": "calling_tool", "tool": "analyze_abap_syntax"})
                     try:
                         from modules.abap import analyze_abap_syntax
                         abap_check_payload = await asyncio.to_thread(analyze_abap_syntax, _code_to_check)
@@ -945,7 +945,7 @@ async def chat_stream(
             from agent.report_agent import is_report_query, generate as gen_report, reply_text as report_reply
             if is_report_query(body.message):
                 status_steps.append("Generating report and charts...")
-                yield _sse("status", {"step": "Generating report and charts...", "phase": "tool_call", "tool": "report_agent"})
+                yield _sse("status", {"step": "Generating report and charts...", "phase": "calling_tool", "tool": "report_agent"})
                 try:
                     report_payload = await asyncio.to_thread(gen_report, body.message)
                     if report_payload:
