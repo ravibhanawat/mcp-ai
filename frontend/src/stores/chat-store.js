@@ -53,18 +53,17 @@ const useChatStore = create((set, get) => ({
 
   // ── finalizeTurn ───────────────────────────────────────────────────────────
   // Called on 'done' event. Moves streaming state into a permanent message object.
-  finalizeTurn: () => {
-    const s = get()
+  finalizeTurn: () => set((prev) => {
     const assistantMsg = {
       id: `asst-${Date.now()}`,
       role: 'assistant',
-      content: s.streamingAnswer,
-      rows: s.currentRows || null,
-      done: s.lastDone || null,
+      content: prev.streamingAnswer,
+      rows: prev.currentRows || null,
+      done: prev.lastDone || null,
       phases: [],
     }
-    set((prev) => ({ messages: [...prev.messages, assistantMsg] }))
-  },
+    return { messages: [...prev.messages, assistantMsg] }
+  }),
 }))
 
 export default useChatStore
