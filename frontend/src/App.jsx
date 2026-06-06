@@ -5,6 +5,7 @@ import { AbapReviewWidget, AbapCodeWidget } from './AbapWidget'
 import ReceiptWidget from './ReceiptWidget'
 import useChatStore from './stores/chat-store.js'
 import { sendMessage as streamSend } from './lib/ask-stream.js'
+import PhaseStepper from './components/chat/PhaseStepper.jsx'
 
 let rawAPI = import.meta.env.VITE_API_URL || '/api'
 if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
@@ -1719,19 +1720,11 @@ function StreamingMessageRow({ msg, onViewData, onVisualizeData }) {
 
         {/* Animated reasoning step track */}
         {msg.status_steps.length > 0 && (
-          <div className="step-track">
-            {msg.status_steps.map((step, i) => {
-              const isActive = i === msg.status_steps.length - 1
-              return (
-                <div key={i} className="step-track-item">
-                  <div className="step-dot-wrap">
-                    <div className={isActive ? 'step-dot-active' : 'step-dot-done'} />
-                  </div>
-                  <span className={`step-track-text ${isActive ? 'active' : ''}`}>{step}</span>
-                </div>
-              )
-            })}
-          </div>
+          <PhaseStepper
+            currentPhase={msg.status_steps?.[msg.status_steps.length - 1] || null}
+            done={false}
+            durationMs={null}
+          />
         )}
 
         {/* Streaming content */}
