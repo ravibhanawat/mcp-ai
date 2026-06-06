@@ -6,6 +6,8 @@ import ReceiptWidget from './ReceiptWidget'
 import useChatStore from './stores/chat-store.js'
 import { sendMessage as streamSend } from './lib/ask-stream.js'
 import PhaseStepper from './components/chat/PhaseStepper.jsx'
+import MarkdownRenderer from './components/ui/MarkdownRenderer.jsx'
+import MessageRowComponent from './components/chat/MessageRow.jsx'
 
 let rawAPI = import.meta.env.VITE_API_URL || '/api'
 if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
@@ -331,7 +333,7 @@ function statusClass(val) {
   return ''
 }
 
-function MarkdownRenderer({ content, className = '' }) {
+function MarkdownRendererLegacy({ content, className = '' }) {
   const blocks = []; const lines = content.split('\n'); let i = 0; let bk = 0
   while (i < lines.length) {
     const line = lines[i]
@@ -1116,9 +1118,9 @@ function ResearchReport({ result }) {
   )
 }
 
-// ─── MessageRow ───────────────────────────────────────────────────────────────
+// ─── MessageRow (legacy — superseded by components/chat/MessageRow.jsx) ───────
 
-function MessageRow({ msg, onViewData, onVisualizeData }) {
+function MessageRowLegacy({ msg, onViewData, onVisualizeData }) {
   const [copied, setCopied] = useState(false)
   const isUser = msg.role === 'user'
 
@@ -3312,11 +3314,15 @@ export default function App() {
           ) : (
             <div className="messages-list">
               {messages.map((msg, i) => (
-                <MessageRow 
-                  key={i} 
-                  msg={msg} 
-                  onViewData={handleViewData} 
-                  onVisualizeData={handleVisualizeData} 
+                <MessageRowComponent
+                  key={i}
+                  msg={msg}
+                  onViewData={handleViewData}
+                  onVisualizeData={handleVisualizeData}
+                  InlineTableHeader={InlineTableHeader}
+                  SapSourceBadge={SapSourceBadge}
+                  ResearchReport={ResearchReport}
+                  Plan={Plan}
                 />
               ))}
               {isRunning && (
@@ -3336,7 +3342,7 @@ export default function App() {
                     ⚠ {streamError}
                   </div>
                 </div>
-              )}}
+              )}
               <div ref={bottomRef} />
             </div>
           )}
