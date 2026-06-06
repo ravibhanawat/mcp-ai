@@ -3080,6 +3080,8 @@ export default function App() {
         return localStorage.getItem('sap_agent_token')
       },
       sessionId: sessionId || 'default',
+      model,
+      userInitial,
     })
 
     loadConversations()

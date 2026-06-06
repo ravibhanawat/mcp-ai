@@ -16,16 +16,16 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
  */
 export async function sendMessage(
   text,
-  { token, onTokenRefresh, sessionId = 'default', clarificationAnswer = null } = {}
+  { token, onTokenRefresh, sessionId = 'default', clarificationAnswer = null, model = 'llama3.2', userInitial = 'U' } = {}
 ) {
   const store = useChatStore.getState()
   store.resetStreamState()
   store.setIsRunning(true)
 
   // Add user message to history immediately (optimistic)
-  store.addMessage({ id: `user-${Date.now()}`, role: 'user', content: text })
+  store.addMessage({ id: `user-${Date.now()}`, role: 'user', content: text, userInitial })
 
-  const body = { message: text, model: 'llama3.2', session_id: sessionId }
+  const body = { message: text, model, session_id: sessionId }
   if (clarificationAnswer) body.clarification_answer = clarificationAnswer
 
   const headers = {
