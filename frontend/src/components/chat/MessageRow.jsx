@@ -3,6 +3,7 @@ import MarkdownRenderer from '../ui/MarkdownRenderer.jsx'
 import ReportWidget from '../../ReportWidget.jsx'
 import { AbapReviewWidget, AbapCodeWidget } from '../../AbapWidget.jsx'
 import ReceiptWidget from '../../ReceiptWidget.jsx'
+import useChatStore from '../../stores/chat-store.js'
 
 // ─── Inline icon helpers ──────────────────────────────────────────────────────
 
@@ -35,17 +36,16 @@ function IconBeaker() {
 
 // ─── MessageRow ───────────────────────────────────────────────────────────────
 
-export default function MessageRow({ msg, onViewData, onVisualizeData, InlineTableHeader, SapSourceBadge, ResearchReport, Plan }) {
+export default function MessageRow({ msg, SapSourceBadge, ResearchReport, Plan }) {
   const [copied, setCopied] = useState(false)
   const isUser = msg.role === 'user'
+  const setDataPanel = useChatStore(s => s.setDataPanel)
 
   const doCopy = () => {
     navigator.clipboard.writeText(msg.content || '')
     setCopied(true)
     setTimeout(() => setCopied(false), 1800)
   }
-
-  const title = (msg.userQuery || '').slice(0, 60) || 'Data'
 
   return (
     <div className={`msg-row ${isUser ? 'user' : 'bot'}`}>
@@ -93,15 +93,17 @@ export default function MessageRow({ msg, onViewData, onVisualizeData, InlineTab
         {/* SAP source */}
         {!msg.research_mode && msg.sap_source && <SapSourceBadge source={msg.sap_source} />}
 
-        {/* Inline table */}
-        {msg.tableData && (
-          <InlineTableHeader
-            tableData={msg.tableData}
-            onViewData={onViewData}
-            onVisualizeData={onVisualizeData}
-            userQuery={msg.userQuery}
-            loading={false}
-          />
+        {/* Data badge — rows fetched during this turn */}
+        {msg.rows?.columns?.length > 0 && (
+          <div className="data-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
+            </svg>
+            <span>{msg.rows.row_count ?? msg.rows.rows?.length ?? 0} records</span>
+            <button className="btn-ghost" onClick={() => setDataPanel({ rows: msg.rows, title: msg.rows.tool || 'Query Results' })}>
+              View Data
+            </button>
+          </div>
         )}
 
         {/* Other widgets */}
@@ -124,22 +126,6 @@ export default function MessageRow({ msg, onViewData, onVisualizeData, InlineTab
               </svg>
               {copied ? 'Copied!' : 'Copy'}
             </button>
-            {msg.tableData && onViewData && (
-              <button className="btn-ghost" onClick={() => onViewData(msg.tableData, title)}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
-                </svg>
-                View Table
-              </button>
-            )}
-            {msg.tableData && onVisualizeData && (
-              <button className="btn-ghost" onClick={() => onVisualizeData(msg.tableData, title)}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
-                </svg>
-                Visualize
-              </button>
-            )}
           </div>
         )}
       </div>

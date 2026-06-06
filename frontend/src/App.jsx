@@ -9,6 +9,7 @@ import PhaseStepper from './components/chat/PhaseStepper.jsx'
 import MarkdownRenderer from './components/ui/MarkdownRenderer.jsx'
 import MessageRowComponent from './components/chat/MessageRow.jsx'
 import StreamingMessageRow from './components/chat/StreamingMessageRow.jsx'
+import DataPanel from './components/data/DataPanel.jsx'
 
 let rawAPI = import.meta.env.VITE_API_URL || '/api'
 if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
@@ -926,68 +927,6 @@ function DataVisualizer({ columns, rows }) {
               )
             })}
           </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── DataViewModal Component ───────────────────────────────────────────────
-
-function DataViewModal({ isOpen, onClose, data, activeTab, onTabChange }) {
-  if (!isOpen || !data) return null
-  
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal data-view-modal">
-        <div className="modal-head">
-          <span className="modal-title">{data.title || 'Data View'}</span>
-          <button className="modal-close" onClick={onClose}><Icons.x /></button>
-        </div>
-        
-        <div className="modal-tabs">
-          <button 
-            className={`modal-tab ${activeTab === 'table' ? 'active' : ''}`} 
-            onClick={() => onTabChange('table')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
-              <rect width="18" height="18" x="3" y="3" rx="2" />
-              <path d="M3 9h18" />
-              <path d="M9 21V9" />
-            </svg>
-            Table View
-          </button>
-          <button 
-            className={`modal-tab ${activeTab === 'chart' ? 'active' : ''}`} 
-            onClick={() => onTabChange('chart')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
-              <line x1="18" y1="20" x2="18" y2="10" />
-              <line x1="12" y1="20" x2="12" y2="4" />
-              <line x1="6" y1="20" x2="6" y2="14" />
-            </svg>
-            Chart Visualization
-          </button>
-        </div>
-        
-        <div className="modal-body data-view-modal-body">
-          {activeTab === 'table' ? (
-            <DataTable 
-              columns={data.columns}
-              rows={data.rows}
-              total={data.total}
-              loading={false}
-            />
-          ) : (
-            <DataVisualizer 
-              columns={data.columns}
-              rows={data.rows}
-            />
-          )}
-        </div>
-        
-        <div className="modal-foot">
-          <button className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>
@@ -2765,13 +2704,7 @@ export default function App() {
     isRunning,
     streamingAnswer,
     currentPhase,
-    currentRows,
     streamError,
-    dataPanel,
-    setDataPanel,
-    setClarification,
-    clarification,
-    lastDone,
   } = useChatStore()
   const [input, setInput] = useState('')
   const [model, setModel] = useState('llama3.2')
@@ -2784,9 +2717,6 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebarCollapsed') === 'true')
   const [searchQuery, setSearchQuery] = useState('')
-  const [showDataModal, setShowDataModal] = useState(false)
-  const [modalData, setModalData] = useState(null) // { columns, rows, total, title }
-  const [modalTab, setModalTab] = useState('table') // 'table' | 'chart'
   const [showSuggestionsModal, setShowSuggestionsModal] = useState(false)
 
   const sidebarSearchRef = useRef(null)
@@ -3047,30 +2977,11 @@ export default function App() {
   const primaryRole = currentUser?.roles?.[0]
   const statusLabel = { checking: 'Checking…', connected: 'LLM Online', disconnected: 'LLM Offline' }[ollamaStatus]
 
-  const handleViewData = (tableData, title = 'Data Preview') => {
-    setModalData({ ...tableData, title })
-    setModalTab('table')
-    setShowDataModal(true)
-  }
-
-  const handleVisualizeData = (tableData, title = 'Data Visualization') => {
-    setModalData({ ...tableData, title })
-    setModalTab('chart')
-    setShowDataModal(true)
-  }
-
   if (needsLogin) return <LoginScreen onLogin={handleLogin} />
 
   return (
     <div className="app-shell">
       {showSettings && <SettingsModal onClose={handleSettingsClose} currentUser={currentUser} />}
-      <DataViewModal 
-        isOpen={showDataModal} 
-        onClose={() => setShowDataModal(false)} 
-        data={modalData} 
-        activeTab={modalTab} 
-        onTabChange={setModalTab} 
-      />
 
       <Sidebar
         onReset={handleReset}
@@ -3271,9 +3182,6 @@ export default function App() {
                 <MessageRowComponent
                   key={i}
                   msg={msg}
-                  onViewData={handleViewData}
-                  onVisualizeData={handleVisualizeData}
-                  InlineTableHeader={InlineTableHeader}
                   SapSourceBadge={SapSourceBadge}
                   ResearchReport={ResearchReport}
                   Plan={Plan}
@@ -3284,11 +3192,7 @@ export default function App() {
                   msg={{
                     content: streamingAnswer,
                     status_steps: currentPhase ? [currentPhase] : [],
-                    tableData: currentRows ? { columns: currentRows.columns, rows: currentRows.rows, total: currentRows.row_count, loading: false } : null,
                   }}
-                  onViewData={handleViewData}
-                  onVisualizeData={handleVisualizeData}
-                  InlineTableHeader={InlineTableHeader}
                   Plan={Plan}
                 />
               )}
@@ -3504,6 +3408,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <DataPanel />
     </div>
   )
 }

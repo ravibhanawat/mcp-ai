@@ -10,7 +10,7 @@ function ShiningText({ text }) {
   return <span className="shining-text">{text}</span>
 }
 
-export default function StreamingMessageRow({ msg, onViewData, onVisualizeData, InlineTableHeader, Plan }) {
+export default function StreamingMessageRow({ msg, Plan }) {
   return (
     <div className="msg-row bot">
       <div className="msg-avatar bot-av">
@@ -34,15 +34,6 @@ export default function StreamingMessageRow({ msg, onViewData, onVisualizeData, 
           <div className="stream-thinking">
             <ShiningText text="clavis is thinking..." />
           </div>
-        )}
-
-        {msg.tableData && InlineTableHeader && (
-          <InlineTableHeader
-            tableData={msg.tableData}
-            onViewData={onViewData}
-            onVisualizeData={onVisualizeData}
-            loading={msg.tableData.loading}
-          />
         )}
 
         {(msg.tool_called === "autonomous_agent" || msg.tool_called === "action_plan" || msg.action_plan) && Plan && (
