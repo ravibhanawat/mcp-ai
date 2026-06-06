@@ -8,6 +8,7 @@ import { sendMessage as streamSend } from './lib/ask-stream.js'
 import PhaseStepper from './components/chat/PhaseStepper.jsx'
 import MarkdownRenderer from './components/ui/MarkdownRenderer.jsx'
 import MessageRowComponent from './components/chat/MessageRow.jsx'
+import StreamingMessageRow from './components/chat/StreamingMessageRow.jsx'
 
 let rawAPI = import.meta.env.VITE_API_URL || '/api'
 if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
@@ -1710,53 +1711,6 @@ function TypingIndicator() {
   )
 }
 
-// ─── StreamingMessageRow ─────────────────────────────────────────────────────
-
-function StreamingMessageRow({ msg, onViewData, onVisualizeData }) {
-  return (
-    <div className="msg-row bot">
-      <div className="msg-avatar bot-av">
-        <Icons.clavis />
-      </div>
-      <div className="msg-body">
-
-        {/* Animated reasoning step track */}
-        {msg.status_steps.length > 0 && (
-          <PhaseStepper
-            currentPhase={msg.status_steps?.[msg.status_steps.length - 1] || null}
-            done={false}
-            durationMs={null}
-          />
-        )}
-
-        {/* Streaming content */}
-        {msg.content ? (
-          <div className="msg-bubble" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {msg.content}
-          </div>
-        ) : (
-          <div className="stream-thinking">
-            <ShiningText text="clavis is thinking..." />
-          </div>
-        )}
-
-        {/* Live table (no action buttons while loading) */}
-        {msg.tableData && (
-          <InlineTableHeader
-            tableData={msg.tableData}
-            onViewData={onViewData}
-            onVisualizeData={onVisualizeData}
-            loading={msg.tableData.loading}
-          />
-        )}
-
-        {(msg.tool_called === "autonomous_agent" || msg.tool_called === "action_plan" || msg.action_plan) && (
-          <Plan planData={msg.action_plan} />
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ─── DevWarningBanner ────────────────────────────────────────────────────────
 
@@ -3334,6 +3288,8 @@ export default function App() {
                   }}
                   onViewData={handleViewData}
                   onVisualizeData={handleVisualizeData}
+                  InlineTableHeader={InlineTableHeader}
+                  Plan={Plan}
                 />
               )}
               {streamError && (
