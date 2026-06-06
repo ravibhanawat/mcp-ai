@@ -4,6 +4,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 const components = {
+  pre({ children }) {
+    return <>{children}</>
+  },
   code({ className, children }) {
     const match = /language-(\w+)/.exec(className || '')
     if (match) {
@@ -18,7 +21,7 @@ const components = {
         </SyntaxHighlighter>
       )
     }
-    return <code className={className}>{children}</code>
+    return <code className={`inline-code${className ? ' ' + className : ''}`}>{children}</code>
   },
 }
 
