@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
+import { VList } from 'virtua'
 import ReportWidget from './ReportWidget'
 import { AbapReviewWidget, AbapCodeWidget } from './AbapWidget'
 import ReceiptWidget from './ReceiptWidget'
@@ -2765,7 +2766,7 @@ export default function App() {
   const [conversations, setConversations] = useState([])
   const [viewMode, setViewMode] = useState('initial')
 
-  const bottomRef = useRef(null)
+  const vlistRef = useRef(null)
   const inputRef = useRef(null)
   const hashLoadedRef = useRef(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
@@ -2822,7 +2823,13 @@ export default function App() {
     apiFetch('/tools').then(r => { if (r.status === 401) { handleLogout(); return } return r.json() }).then(d => d).catch(() => { })
   }, [authToken, needsLogin, handleLogout])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isRunning, streamingAnswer])
+  // Auto-scroll chat to bottom when new messages arrive or stream updates
+  useEffect(() => {
+    const list = vlistRef.current
+    if (!list) return
+    const total = messages.length + (isRunning ? 1 : 0)
+    if (total > 0) list.scrollToIndex(total - 1, { align: 'end', smooth: true })
+  }, [messages.length, isRunning, streamingAnswer])
 
   // ── History helpers ─────────────────────────────────────────────────────────
   const loadConversations = useCallback(async () => {
@@ -3177,7 +3184,7 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="messages-list">
+            <VList ref={vlistRef} className="messages-list">
               {messages.map((msg, i) => (
                 <MessageRowComponent
                   key={i}
@@ -3189,6 +3196,7 @@ export default function App() {
               ))}
               {isRunning && (
                 <StreamingMessageRow
+                  key="streaming"
                   msg={{
                     content: streamingAnswer,
                     status_steps: currentPhase ? [currentPhase] : [],
@@ -3197,14 +3205,13 @@ export default function App() {
                 />
               )}
               {streamError && (
-                <div className="msg-row bot-row">
+                <div key="error" className="msg-row bot-row">
                   <div className="msg-bubble bot-bubble" style={{ color: 'var(--error, #dc2626)' }}>
                     ⚠ {streamError}
                   </div>
                 </div>
               )}
-              <div ref={bottomRef} />
-            </div>
+            </VList>
           )}
 
           {/* Input bar */}
