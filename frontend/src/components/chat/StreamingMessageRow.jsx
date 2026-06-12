@@ -18,9 +18,9 @@ export default function StreamingMessageRow({ msg, Plan }) {
       </div>
       <div className="msg-body">
 
-        {msg.status_steps.length > 0 && (
+        {msg.status_steps?.length > 0 && (
           <PhaseStepper
-            currentPhase={msg.status_steps?.[msg.status_steps.length - 1] || null}
+            currentPhase={msg.currentPhase || null}
             done={false}
             durationMs={null}
           />
@@ -32,7 +32,7 @@ export default function StreamingMessageRow({ msg, Plan }) {
           </div>
         ) : (
           <div className="stream-thinking">
-            <ShiningText text="clavis is thinking..." />
+            <ShiningText text="Kutty is thinking..." />
           </div>
         )}
 

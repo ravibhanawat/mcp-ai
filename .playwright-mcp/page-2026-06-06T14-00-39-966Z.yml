@@ -1,0 +1,88 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - button "Expand sidebar" [ref=e494] [cursor=pointer]:
+      - img [ref=e495]
+    - generic "CLAVIS" [ref=e496]:
+      - img [ref=e497]
+    - button "Search chats" [ref=e503] [cursor=pointer]:
+      - img [ref=e504]
+    - button "New chat" [ref=e507] [cursor=pointer]:
+      - img [ref=e508]
+    - generic [ref=e25]:
+      - generic "System Administrator" [ref=e509] [cursor=pointer]: S
+      - button "Sign out" [ref=e510] [cursor=pointer]:
+        - img [ref=e511]
+  - generic [ref=e36]:
+    - banner [ref=e37]:
+      - generic [ref=e38]:
+        - img [ref=e40]
+        - generic [ref=e46]: CLAVIS
+      - generic [ref=e47]:
+        - generic [ref=e50]: LLM Online
+        - generic [ref=e51]:
+          - generic [ref=e52]: S
+          - generic [ref=e53]:
+            - generic [ref=e54]: System Administrator
+            - generic [ref=e55]: Administrator
+          - button "Sign out" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+        - button "Toggle Light/Dark Theme" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+        - button "Configuration" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+    - generic [ref=e133]:
+      - generic [ref=e134]:
+        - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [ref=e136]
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - button "llama3.2" [ref=e140] [cursor=pointer]:
+              - img [ref=e141]
+              - generic [ref=e144]: llama3.2
+              - img [ref=e145]
+            - generic "Attach file" [ref=e148] [cursor=pointer]:
+              - img [ref=e149]
+            - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e151] [cursor=pointer]:
+              - img [ref=e152]
+            - button "Show suggestions" [ref=e154] [cursor=pointer]:
+              - img [ref=e155]
+          - button "Send message" [disabled] [ref=e158] [cursor=pointer]:
+            - img [ref=e514]
+      - generic [ref=e161]: CLAVIS can make mistakes. Verify important results.
+  - generic [ref=e518]:
+    - generic [ref=e519]:
+      - generic [ref=e520]: Query Results
+      - button "✕" [ref=e521] [cursor=pointer]
+    - generic [ref=e522]:
+      - button "Table" [ref=e523] [cursor=pointer]
+      - button "Chart" [active] [ref=e524] [cursor=pointer]
+    - generic [ref=e663]:
+      - generic [ref=e664]:
+        - button "Bar" [ref=e665] [cursor=pointer]
+        - button "Line" [ref=e666] [cursor=pointer]
+        - button "Area" [ref=e667] [cursor=pointer]
+        - button "Pie" [ref=e668] [cursor=pointer]
+        - button "Donut" [ref=e669] [cursor=pointer]
+        - button "Scatter" [ref=e670] [cursor=pointer]
+        - button "Radar" [ref=e671] [cursor=pointer]
+        - button "Heatmap" [ref=e672] [cursor=pointer]
+      - generic [ref=e673]:
+        - generic [ref=e674]:
+          - generic [ref=e675]: Label
+          - combobox "Label" [ref=e676] [cursor=pointer]:
+            - option "id" [selected]
+            - option "name"
+            - option "department"
+            - option "budget"
+            - option "actual"
+            - option "utilization_pct"
+            - option "currency"
+        - generic [ref=e677]:
+          - generic [ref=e678]: Value
+          - combobox "Value" [ref=e679] [cursor=pointer]:
+            - option "id"
+            - option "name"
+            - option "department"
+            - option "budget" [selected]
+            - option "actual"
+            - option "utilization_pct"
+            - option "currency"

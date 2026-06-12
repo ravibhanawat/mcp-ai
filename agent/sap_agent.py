@@ -53,6 +53,10 @@ class SAPAgent:
         self._use_mlx = self._mlx_available()
         self.model = model
         self.ollama_url = ollama_url
+        # When False, an unreachable Ollama raises instead of falling back to a
+        # cloud LLM. Callers handling confidential text (e.g. Kutty ticket RAG)
+        # set this False so payloads never leave the machine.
+        self.allow_cloud_fallback = True
         self.conversation_history = []
         self.system_prompt = self._build_system_prompt()
 
@@ -347,6 +351,11 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             data = response.json()
             return data["message"]["content"]
         except requests.exceptions.ConnectionError:
+            if not self.allow_cloud_fallback:
+                raise ConnectionError(
+                    f"Cannot connect to Ollama at {self.ollama_url} and cloud "
+                    "fallback is disabled (confidential payload stays local)."
+                )
             _logger.warning("Ollama unreachable at %s — trying cloud LLM fallback.", self.ollama_url)
             return self._call_cloud_fallback(messages)
         except requests.exceptions.Timeout:
@@ -588,7 +597,18 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         if any(kw in t for kw in ["list abap", "abap program list", "all program"]):
             return {"name": "list_abap_programs", "parameters": {}}
 
+        # Ticket backlog (Kutty RAG) — route clear backlog questions to the ticket
+        # index. Checked last so specific SAP entity patterns above win first.
+        if any(kw in t for kw in ["ticket", "tickets", "backlog", "ricefw", "wricef"]):
+            return {"name": "search_sap_tickets", "parameters": {"query": text}}
+
         return None
+
+    @staticmethod
+    def _apply_ticket_status(tool_name: str, tool_params: dict, ticket_status: str | None) -> None:
+        """Inject the UI-selected status filter into a Kutty ticket-search call."""
+        if tool_name == "search_sap_tickets" and ticket_status:
+            tool_params.setdefault("status", ticket_status)
 
     def _extract_action_plan(self, response: str) -> dict | None:
         """Extract an action plan JSON (intent/module/action/required_inputs/steps) from LLM response."""
@@ -797,7 +817,8 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         except Exception:
             return self._friendly_fallback(tool_name, tool_result)
 
-    def chat(self, user_message: str, allowed_tools: set[str] | None = None) -> tuple:
+    def chat(self, user_message: str, allowed_tools: set[str] | None = None,
+             ticket_status: str | None = None) -> tuple:
         """
         Main chat method — returns (response_text, tool_name, tool_result).
 
@@ -840,6 +861,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                 )
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
+            self._apply_ticket_status(tool_name, tool_params, ticket_status)
             tool_result = execute_tool(tool_name, tool_params)
 
             # Response formatting uses local LLM (tool data must not leave the network)
@@ -870,6 +892,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                 )
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
+            self._apply_ticket_status(tool_name, tool_params, ticket_status)
             tool_result = execute_tool(tool_name, tool_params)
 
             final_response = self._format_tool_response(user_message, tool_name, tool_result)
@@ -1063,6 +1086,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         user_message: str,
         allowed_tools: set | None = None,
         clarification_answer: str | None = None,
+        ticket_status: str | None = None,
     ):
         """
         Async generator that yields SSE-formatted strings for the streaming chat endpoint.
@@ -1156,6 +1180,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
+            self._apply_ticket_status(tool_name, tool_params, ticket_status)
             _sap_module = tool_name.split("_")[0].upper() if "_" in tool_name else tool_name.upper()
             yield _sse("intent", {"modules": [_sap_module], "confidence": 1.0, "routing": "confirmed"})
             yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "calling_tool", "tool": tool_name})
@@ -1215,6 +1240,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
             tool_name   = tool_call["name"]
             tool_params = tool_call.get("parameters", {})
+            self._apply_ticket_status(tool_name, tool_params, ticket_status)
             _sap_module = tool_name.split("_")[0].upper() if "_" in tool_name else tool_name.upper()
             yield _sse("intent", {"modules": [_sap_module], "confidence": 1.0, "routing": "confirmed"})
             yield _sse("status", {"step": f"Calling SAP tool: {tool_name}", "phase": "calling_tool", "tool": tool_name})

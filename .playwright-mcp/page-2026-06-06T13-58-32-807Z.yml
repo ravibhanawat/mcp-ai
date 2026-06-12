@@ -1,0 +1,132 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: CLAVIS
+        - generic [ref=e8]: v0.1
+      - button "Collapse sidebar" [ref=e9] [cursor=pointer]:
+        - img [ref=e10]
+    - generic [ref=e12]:
+      - img [ref=e13]
+      - textbox "Search chats" [ref=e16]
+      - generic [ref=e17]: ⌘K
+    - button "+ New chat" [ref=e19] [cursor=pointer]:
+      - generic [ref=e20]: +
+      - text: New chat
+    - generic [ref=e22]: Earlier
+    - generic [ref=e23]:
+      - generic [ref=e162] [cursor=pointer]:
+        - generic [ref=e163]:
+          - generic [ref=e164]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e165]: 85-3bckp92 · 2 msgs · 1m ago
+        - button "Delete" [ref=e166]:
+          - img [ref=e167]
+      - generic [ref=e169] [cursor=pointer]:
+        - generic [ref=e170]:
+          - generic [ref=e171]: Get employee info and leave balance for EMP001
+          - generic [ref=e172]: 28-bhp91ct · 2 msgs · 30/05/2026
+        - button "Delete" [ref=e173]:
+          - img [ref=e174]
+      - generic [ref=e176] [cursor=pointer]:
+        - generic [ref=e177]:
+          - generic [ref=e178]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e179]: 34-g6c2kb9 · 2 msgs · 30/05/2026
+        - button "Delete" [ref=e180]:
+          - img [ref=e181]
+      - generic [ref=e183] [cursor=pointer]:
+        - generic [ref=e184]:
+          - generic [ref=e185]: What is the budget vs actual for Cost Center CC200?
+          - generic [ref=e186]: 73-r0f20an · 2 msgs · 30/05/2026
+        - button "Delete" [ref=e187]:
+          - img [ref=e188]
+      - generic [ref=e190] [cursor=pointer]:
+        - generic [ref=e191]:
+          - generic [ref=e192]: Show me open purchase orders
+          - generic [ref=e193]: 97-gafagsw · 2 msgs · 30/05/2026
+        - button "Delete" [ref=e194]:
+          - img [ref=e195]
+      - generic [ref=e197] [cursor=pointer]:
+        - generic [ref=e198]:
+          - generic [ref=e199]: Show me open purchase orders
+          - generic [ref=e200]: 27-4je0px3 · 2 msgs · 30/05/2026
+        - button "Delete" [ref=e201]:
+          - img [ref=e202]
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - generic [ref=e27]: S
+        - generic [ref=e28]:
+          - generic [ref=e29]: System Administrator
+          - generic [ref=e30]: READER
+        - button "Sign out" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+      - generic [ref=e35]: 🎭 Mock mode
+  - generic [ref=e36]:
+    - banner [ref=e37]:
+      - generic [ref=e38]:
+        - img [ref=e40]
+        - generic [ref=e46]: CLAVIS
+      - generic [ref=e47]:
+        - generic [ref=e50]: LLM Online
+        - generic [ref=e51]:
+          - generic [ref=e52]: S
+          - generic [ref=e53]:
+            - generic [ref=e54]: System Administrator
+            - generic [ref=e55]: Administrator
+          - button "Sign out" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+        - button "Toggle Light/Dark Theme" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+        - button "Configuration" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+    - generic [ref=e133]:
+      - generic [ref=e134]:
+        - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [active] [ref=e136]
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - button "llama3.2" [ref=e140] [cursor=pointer]:
+              - img [ref=e141]
+              - generic [ref=e144]: llama3.2
+              - img [ref=e145]
+            - generic "Attach file" [ref=e148] [cursor=pointer]:
+              - img [ref=e149]
+            - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e151] [cursor=pointer]:
+              - img [ref=e152]
+            - button "Show suggestions" [ref=e154] [cursor=pointer]:
+              - img [ref=e155]
+          - button "Send message" [disabled] [ref=e158] [cursor=pointer]:
+            - img [ref=e491]
+      - generic [ref=e161]: CLAVIS can make mistakes. Verify important results.
+  - generic [ref=e208]:
+    - generic [ref=e209]:
+      - generic [ref=e210]: Query Results
+      - button "✕" [ref=e211] [cursor=pointer]
+    - generic [ref=e212]:
+      - button "Table" [ref=e213] [cursor=pointer]
+      - button "Chart" [ref=e214] [cursor=pointer]
+    - generic [ref=e471]:
+      - generic [ref=e472]:
+        - button "Bar" [ref=e473] [cursor=pointer]
+        - button "Line" [ref=e474] [cursor=pointer]
+        - button "Area" [ref=e475] [cursor=pointer]
+        - button "Pie" [ref=e476] [cursor=pointer]
+        - button "Donut" [ref=e477] [cursor=pointer]
+        - button "Scatter" [ref=e478] [cursor=pointer]
+        - button "Radar" [ref=e479] [cursor=pointer]
+        - button "Heatmap" [ref=e480] [cursor=pointer]
+      - generic [ref=e481]:
+        - generic [ref=e482]:
+          - generic [ref=e483]: Label
+          - combobox "Label" [ref=e484] [cursor=pointer]:
+            - option "emp_id" [selected]
+            - option "name"
+            - option "department"
+            - option "position"
+            - option "grade"
+        - generic [ref=e485]:
+          - generic [ref=e486]: Value
+          - combobox "Value" [ref=e487] [cursor=pointer]:
+            - option "emp_id"
+            - option "name" [selected]
+            - option "department"
+            - option "position"
+            - option "grade"

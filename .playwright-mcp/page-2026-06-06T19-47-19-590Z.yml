@@ -1,0 +1,91 @@
+- generic [ref=e338]:
+  - generic [ref=e339]:
+    - button "Expand sidebar" [ref=e341] [cursor=pointer]:
+      - img [ref=e342]
+    - generic "CLAVIS" [ref=e343]:
+      - img [ref=e344]
+    - button "Search chats" [ref=e350] [cursor=pointer]:
+      - img [ref=e351]
+    - button "New chat" [ref=e354] [cursor=pointer]:
+      - img [ref=e355]
+    - generic [ref=e356]:
+      - generic "System Administrator" [ref=e357] [cursor=pointer]: S
+      - button "Sign out" [ref=e358] [cursor=pointer]:
+        - img [ref=e359]
+  - generic [ref=e362]:
+    - banner [ref=e363]:
+      - generic [ref=e364]:
+        - img [ref=e366]
+        - generic [ref=e372]: CLAVIS
+      - generic [ref=e373]:
+        - generic [ref=e376]: LLM Online
+        - generic [ref=e377]:
+          - generic [ref=e378]: S
+          - generic [ref=e379]:
+            - generic [ref=e380]: System Administrator
+            - generic [ref=e381]: Administrator
+          - button "Sign out" [ref=e382] [cursor=pointer]:
+            - img [ref=e383]
+        - button "Toggle Light/Dark Theme" [ref=e386] [cursor=pointer]:
+          - img [ref=e387]
+        - button "Configuration" [ref=e389] [cursor=pointer]:
+          - img [ref=e390]
+    - generic [ref=e393]:
+      - generic [ref=e395]:
+        - generic [ref=e396]:
+          - heading "How can I help today?" [level=1] [ref=e397]
+          - paragraph [ref=e398]: Type a command or ask a question
+        - generic [ref=e399]:
+          - heading "Explore Clavis agents" [level=2] [ref=e401]
+          - generic [ref=e402]:
+            - generic [ref=e403] [cursor=pointer]:
+              - generic [ref=e404]:
+                - img [ref=e406]
+                - generic [ref=e408]: FI/CO Analyst
+              - paragraph [ref=e409]: Finance & Controlling agent for invoices and budget checks.
+            - generic [ref=e410] [cursor=pointer]:
+              - generic [ref=e411]:
+                - img [ref=e413]
+                - generic [ref=e416]: MM Stock Manager
+              - paragraph [ref=e417]: Materials Management agent for stock levels and reordering.
+            - generic [ref=e418] [cursor=pointer]:
+              - generic [ref=e419]:
+                - img [ref=e421]
+                - generic [ref=e425]: SD Sales Assistant
+              - paragraph [ref=e426]: Sales & Distribution agent for tracking customer orders.
+            - generic [ref=e427] [cursor=pointer]:
+              - generic [ref=e428]:
+                - img [ref=e430]
+                - generic [ref=e435]: HR Representative
+              - paragraph [ref=e436]: Human Resources agent for leaves, payslips, and employee data.
+            - generic [ref=e437] [cursor=pointer]:
+              - generic [ref=e438]:
+                - img [ref=e440]
+                - generic [ref=e444]: Real Estate Analyst
+              - paragraph [ref=e445]: Parivartan agent for unit outstandings and cheque parking.
+            - generic [ref=e446] [cursor=pointer]:
+              - generic [ref=e447]:
+                - img [ref=e449]
+                - generic [ref=e452]: ABAP Developer
+              - paragraph [ref=e453]: Development and transport status check assistant.
+          - generic [ref=e455] [cursor=pointer]:
+            - generic [ref=e456]: Start building
+            - img [ref=e457]
+      - generic [ref=e459]:
+        - generic [ref=e460]:
+          - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [ref=e462]
+          - generic [ref=e463]:
+            - generic [ref=e464]:
+              - button "llama3.2" [ref=e466] [cursor=pointer]:
+                - img [ref=e467]
+                - generic [ref=e470]: llama3.2
+                - img [ref=e471]
+              - generic "Attach file" [ref=e474] [cursor=pointer]:
+                - img [ref=e475]
+              - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e477] [cursor=pointer]:
+                - img [ref=e478]
+              - button "Show suggestions" [ref=e480] [cursor=pointer]:
+                - img [ref=e481]
+            - button "Send message" [disabled] [ref=e484] [cursor=pointer]:
+              - img [ref=e485]
+        - generic [ref=e487]: CLAVIS can make mistakes. Verify important results.

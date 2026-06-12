@@ -41,6 +41,26 @@ export default function MessageRow({ msg, SapSourceBadge, ResearchReport, Plan }
   const isUser = msg.role === 'user'
   const setDataPanel = useChatStore(s => s.setDataPanel)
 
+  // Kutty ticket-backlog sources (when this turn used the ticket-search tool)
+  const kuttyTickets = (!isUser && msg.done?.tool_called === 'search_sap_tickets')
+    ? (msg.done?.tool_result?.tickets || [])
+    : []
+
+  const viewTickets = () => {
+    setDataPanel({
+      mode: 'data',
+      title: 'Kutty — Tickets',
+      rows: {
+        columns: ['Ticket ID', 'Title', 'Module', 'Project', 'Status'],
+        rows: kuttyTickets.map(t => ({
+          'Ticket ID': t.ticket_id, 'Title': t.title,
+          'Module': t.module, 'Project': t.project, 'Status': t.status,
+        })),
+        row_count: kuttyTickets.length,
+      },
+    })
+  }
+
   const doCopy = () => {
     navigator.clipboard.writeText(msg.content || '')
     setCopied(true)
@@ -88,10 +108,30 @@ export default function MessageRow({ msg, SapSourceBadge, ResearchReport, Plan }
         {/* Meta badges */}
         <div className="msg-meta">
           {msg.research_mode && <span className="badge badge-research">AUTO RESEARCH</span>}
+          {kuttyTickets.length > 0 && <span className="badge badge-research">KUTTY · {kuttyTickets.length} TICKETS</span>}
         </div>
 
         {/* SAP source */}
         {!msg.research_mode && msg.sap_source && <SapSourceBadge source={msg.sap_source} />}
+
+        {/* Kutty ticket sources */}
+        {kuttyTickets.length > 0 && (
+          <div className="kutty-sources">
+            <div className="kutty-sources-head">
+              <span>Tickets cited</span>
+              <button className="btn-ghost" onClick={viewTickets}>View tickets</button>
+            </div>
+            <ul className="kutty-source-list">
+              {kuttyTickets.map((t, i) => (
+                <li key={t.ticket_id || i} className="kutty-source-item">
+                  {t.ticket_id && <code className="kutty-tid">#{t.ticket_id}</code>}
+                  <span className="kutty-title">{t.title || '(untitled)'}</span>
+                  {t.status && <span className="kutty-status-chip">{t.status}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Data badge — rows fetched during this turn */}
         {msg.rows?.columns?.length > 0 && (

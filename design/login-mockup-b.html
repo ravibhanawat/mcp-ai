@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KUTTY ERP — Login Mockup B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#1B3254;
+    --navy-deep:#0c1a30;
+    --navy-deep2:#081320;
+    --gold:#C89B3C;
+    --gold-soft:#e6c87e;
+    --beige:#EDE8DC;
+    --ink:#eef2f8;
+    --ink-2:#9fb0c8;
+    --line:rgba(255,255,255,.12);
+    --font-sans:'Inter',-apple-system,system-ui,sans-serif;
+    --font-display:'Fraunces',Georgia,serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-sans);color:var(--ink);-webkit-font-smoothing:antialiased;
+    background:var(--navy-deep2);overflow:hidden;
+    display:flex;align-items:center;justify-content:center;min-height:100vh;
+  }
+
+  /* ---------- atmospheric background ---------- */
+  .bg{position:fixed;inset:0;overflow:hidden;z-index:0}
+  .bg-base{position:absolute;inset:0;
+    background:
+      radial-gradient(70% 55% at 18% 22%, rgba(58,40,110,.55) 0%, transparent 60%),
+      radial-gradient(60% 60% at 85% 78%, rgba(200,155,60,.14) 0%, transparent 60%),
+      radial-gradient(55% 60% at 62% 30%, rgba(36,66,110,.6) 0%, transparent 65%),
+      linear-gradient(160deg, #0a1124 0%, #05070f 60%, #03040a 100%);
+  }
+  /* nebula clouds */
+  .aurora{position:absolute;border-radius:50%;filter:blur(75px);opacity:.5;mix-blend-mode:screen}
+  .a1{width:560px;height:560px;top:-140px;left:-90px;background:radial-gradient(circle,#5b3aa0,transparent 70%);animation:drift1 18s ease-in-out infinite}
+  .a2{width:480px;height:480px;bottom:-150px;right:-70px;background:radial-gradient(circle,#caa24a,transparent 70%);opacity:.28;animation:drift2 21s ease-in-out infinite}
+  .a3{width:420px;height:420px;top:38%;left:54%;background:radial-gradient(circle,#1f74a8,transparent 70%);opacity:.34;animation:drift1 24s ease-in-out infinite reverse}
+  .a4{width:360px;height:360px;top:8%;left:60%;background:radial-gradient(circle,#a8437f,transparent 70%);opacity:.22;animation:drift2 26s ease-in-out infinite}
+
+  /* Milky Way band */
+  .milkyway{position:absolute;width:170%;height:360px;top:26%;left:-35%;transform:rotate(-19deg);
+    background:radial-gradient(ellipse at center, rgba(150,130,225,.20), rgba(120,150,225,.10) 42%, transparent 72%);
+    filter:blur(42px);mix-blend-mode:screen;opacity:.85;animation:mwPulse 12s ease-in-out infinite}
+
+  /* parallax starfields (box-shadow stars injected by script) */
+  .stars,.stars2,.stars3{position:absolute;top:0;left:0;border-radius:50%;background:transparent}
+  .stars{width:1px;height:1px;animation:starDrift 140s linear infinite, twinkle 4s ease-in-out infinite}
+  .stars2{width:2px;height:2px;animation:starDrift 95s linear infinite, twinkle 6s ease-in-out infinite .8s}
+  .stars3{width:2px;height:2px;animation:starDrift 60s linear infinite, twinkle 5s ease-in-out infinite .4s}
+  .stars::after,.stars2::after,.stars3::after{content:" ";position:absolute;top:2000px;left:0;width:inherit;height:inherit;border-radius:50%;background:transparent;box-shadow:inherit}
+
+  /* shooting stars */
+  .shoot{position:absolute;width:130px;height:2px;border-radius:2px;opacity:0;
+    background:linear-gradient(90deg,#fff,rgba(255,255,255,0));filter:drop-shadow(0 0 6px rgba(255,255,255,.8))}
+  .shoot1{top:16%;left:8%;animation:shoot 8s ease-in infinite 2s}
+  .shoot2{top:40%;left:34%;animation:shoot 11s ease-in infinite 6s}
+  .grid{position:absolute;inset:0;opacity:.6;
+    background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+    background-size:54px 54px;mask-image:radial-gradient(80% 80% at 50% 45%,#000 35%,transparent 85%)}
+  .grain{position:absolute;inset:0;opacity:.05;pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  /* drifting particles */
+  .pt{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--gold-soft);opacity:.5;box-shadow:0 0 8px var(--gold-soft)}
+  .pt:nth-child(1){top:18%;left:24%;animation:floatY 7s ease-in-out infinite}
+  .pt:nth-child(2){top:70%;left:18%;animation:floatY 9s ease-in-out infinite 1s;background:#7fb6e0;box-shadow:0 0 8px #7fb6e0}
+  .pt:nth-child(3){top:30%;left:78%;animation:floatY 8s ease-in-out infinite .5s}
+  .pt:nth-child(4){top:82%;left:72%;animation:floatY 10s ease-in-out infinite 1.4s;background:#7fb6e0;box-shadow:0 0 8px #7fb6e0}
+  .pt:nth-child(5){top:12%;left:62%;animation:floatY 6.5s ease-in-out infinite .8s}
+
+  /* ---------- card ---------- */
+  .card{
+    position:relative;z-index:2;width:430px;max-width:calc(100vw - 40px);
+    background:linear-gradient(165deg, rgba(28,46,78,.72), rgba(12,26,48,.66));
+    border:1px solid var(--line);border-radius:24px;
+    padding:44px 46px;backdrop-filter:blur(22px) saturate(140%);
+    box-shadow:0 40px 90px -30px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.08);
+    animation:rise .8s cubic-bezier(.2,.7,.2,1) both;
+  }
+  /* gold top hairline */
+  .card::before{content:"";position:absolute;top:-1px;left:34px;right:34px;height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.7}
+
+  .logo-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:26px}
+  .halo-mark{position:relative;width:62px;height:58px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+  .halo-mark .halo{position:absolute;width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle,rgba(200,155,60,.35),transparent 65%);animation:glow 4.5s ease-in-out infinite}
+  .halo-mark svg{position:relative;z-index:2;animation:float 5s ease-in-out infinite;filter:drop-shadow(0 10px 22px rgba(0,0,0,.5))}
+  .wordmark{font-family:var(--font-display);font-size:25px;font-weight:600;letter-spacing:.3px}
+  .wordmark b{color:var(--gold);font-weight:600}
+  .tagline{font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-2);margin-top:7px}
+
+  form{display:flex;flex-direction:column;gap:15px;margin-top:6px}
+  .field{position:relative}
+  label.lbl{display:block;font-size:11.5px;font-weight:600;color:var(--ink-2);margin-bottom:7px;letter-spacing:.04em;text-transform:uppercase}
+  .inp{
+    width:100%;height:50px;border:1px solid var(--line);border-radius:12px;padding:0 16px;
+    font-size:14px;font-family:var(--font-sans);color:var(--ink);background:rgba(255,255,255,.05);
+    outline:none;transition:border-color .2s,box-shadow .2s,background .2s;
+  }
+  .inp::placeholder{color:#73849c}
+  .inp:focus{border-color:var(--gold);background:rgba(255,255,255,.08);box-shadow:0 0 0 4px rgba(200,155,60,.14)}
+  .pw-toggle{position:absolute;right:6px;top:30px;height:40px;padding:0 12px;border:none;background:none;
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;font-family:var(--font-sans)}
+  .pw-toggle:hover{color:var(--gold-soft);background:rgba(255,255,255,.06)}
+
+  .row{display:flex;align-items:center;justify-content:space-between;margin-top:-3px}
+  .remember{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+  .remember input{accent-color:var(--gold);width:15px;height:15px}
+  .link{font-size:12.5px;font-weight:600;color:var(--gold-soft);text-decoration:none}
+  .link:hover{text-decoration:underline}
+
+  .btn{
+    height:52px;margin-top:6px;border:none;border-radius:12px;cursor:pointer;
+    background:linear-gradient(180deg,#d6a945,var(--gold));color:#1a1300;
+    font-family:var(--font-sans);font-size:14.5px;font-weight:700;letter-spacing:.02em;
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    box-shadow:0 12px 28px -10px rgba(200,155,60,.7);transition:transform .12s,box-shadow .2s,filter .2s;
+  }
+  .btn:hover{filter:brightness(1.06);box-shadow:0 16px 34px -10px rgba(200,155,60,.8)}
+  .btn:active{transform:translateY(1px)}
+  .btn .spin{width:15px;height:15px;border:2px solid rgba(26,19,0,.3);border-top-color:#1a1300;border-radius:50%;animation:spin .7s linear infinite}
+
+  .demo{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+  .demo-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px}
+  .demo-row{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-family:var(--font-mono);font-size:11px;color:var(--ink-2);
+    background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:8px;padding:5px 11px;cursor:pointer;transition:all .15s}
+  .chip:hover{color:var(--gold-soft);border-color:var(--gold);background:rgba(200,155,60,.08)}
+
+  .foot{position:fixed;bottom:22px;left:0;right:0;text-align:center;font-size:11px;color:#5b6c84;letter-spacing:.04em;z-index:2}
+
+  @keyframes rise{from{opacity:0;transform:translateY(26px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+  @keyframes floatY{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-26px);opacity:.9}}
+  @keyframes glow{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.12)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,40px)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-30px)}}
+  @keyframes starDrift{from{transform:translateY(0)}to{transform:translateY(-2000px)}}
+  @keyframes twinkle{0%,100%{opacity:.45}50%{opacity:1}}
+  @keyframes mwPulse{0%,100%{opacity:.7}50%{opacity:.95}}
+  @keyframes shoot{0%{opacity:0;transform:translate(0,0) rotate(22deg)}4%{opacity:1}16%{opacity:0;transform:translate(420px,170px) rotate(22deg)}100%{opacity:0;transform:translate(420px,170px) rotate(22deg)}}
+
+  @media(max-width:480px){.card{padding:36px 26px}}
+</style>
+</head>
+<body>
+  <div class="bg">
+    <div class="bg-base"></div>
+    <div class="milkyway"></div>
+    <div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div><div class="aurora a4"></div>
+    <div class="stars" id="stars"></div>
+    <div class="stars2" id="stars2"></div>
+    <div class="stars3" id="stars3"></div>
+    <div class="shoot shoot1"></div><div class="shoot shoot2"></div>
+    <div class="grid"></div>
+    <span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span>
+    <div class="grain"></div>
+  </div>
+
+  <main class="card">
+    <div class="logo-wrap">
+      <div class="halo-mark">
+        <div class="halo"></div>
+        <svg width="56" height="52" viewBox="0 0 58 54" fill="none">
+          <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#24426e" stroke="#C89B3C" stroke-width="1.2"/>
+          <circle cx="22" cy="27" r="9" fill="#C89B3C"/><circle cx="22" cy="27" r="4" fill="#1B3254"/>
+          <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+          <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+          <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
+        </svg>
+      </div>
+      <div class="wordmark">KUTTY <b>ERP</b></div>
+      <div class="tagline">Enterprise ERP Intelligence</div>
+    </div>
+
+    <form onsubmit="return false">
+      <div class="field">
+        <label class="lbl">User ID</label>
+        <input class="inp" placeholder="Enter your user ID" autocomplete="username" autofocus />
+      </div>
+      <div class="field">
+        <label class="lbl">Password</label>
+        <input class="inp" type="password" placeholder="Enter your password" autocomplete="current-password" id="pw" />
+        <button type="button" class="pw-toggle" onclick="var p=document.getElementById('pw');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'Show':'Hide'">Show</button>
+      </div>
+      <div class="row">
+        <label class="remember"><input type="checkbox" /> Remember me</label>
+        <a class="link" href="#">Need help?</a>
+      </div>
+      <button class="btn" type="submit"><span class="spin" style="display:none"></span> Sign In</button>
+    </form>
+
+    <div class="demo">
+      <div class="demo-label">Demo accounts</div>
+      <div class="demo-row">
+        <button class="chip">admin</button>
+        <button class="chip">fi_user</button>
+        <button class="chip">hr_user</button>
+        <button class="chip">demo</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="foot">© KUTTY 2026 · Secure access via CLAVIS</div>
+
+  <script>
+    // Generate a box-shadow starfield spread across a 2000x2000 field (loops via ::after).
+    function starfield(id, count, color){
+      var el = document.getElementById(id), sh = [];
+      for (var i = 0; i < count; i++){
+        var x = Math.floor(Math.random()*2000), y = Math.floor(Math.random()*2000);
+        sh.push(x + 'px ' + y + 'px ' + color);
+      }
+      el.style.boxShadow = sh.join(',');
+    }
+    starfield('stars', 700, 'rgba(255,255,255,.85)');   // faint distant stars
+    starfield('stars2', 220, 'rgba(207,227,255,.95)');  // mid stars (blue-white)
+    starfield('stars3', 70, 'rgba(230,200,126,.95)');   // bright golden stars
+  </script>
+</body>
+</html>

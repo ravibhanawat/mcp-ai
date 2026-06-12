@@ -1,0 +1,22 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - img [ref=e6]
+    - generic [ref=e34]:
+      - img [ref=e36]
+      - heading "CLAVIS ERP" [level=1] [ref=e43]
+      - paragraph [ref=e44]: Enterprise ERP Intelligence
+      - generic [ref=e45]:
+        - textbox "Enter User ID" [active] [ref=e46]
+        - generic [ref=e47]:
+          - textbox "Password" [ref=e48]
+          - button "Show" [ref=e49] [cursor=pointer]
+        - button "Sign In" [disabled] [ref=e50]
+      - generic [ref=e51]:
+        - paragraph [ref=e52]: Quick demo access
+        - generic [ref=e53]:
+          - button "admin" [ref=e54] [cursor=pointer]
+          - button "fi_user" [ref=e55] [cursor=pointer]
+          - button "hr_user" [ref=e56] [cursor=pointer]
+          - button "demo" [ref=e57] [cursor=pointer]
+    - img [ref=e59]
+  - generic [ref=e86]: Copyright © CLAVIS 2026 · Enterprise ERP Intelligence

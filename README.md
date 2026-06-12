@@ -246,3 +246,6 @@ r = requests.get(url, auth=('user', 'pass'))
 MIT — see [LICENSE](LICENSE)
 SapAdmin@2026!
 source .venv/bin/activate && bash scripts/start_dev.sh
+
+ ollama create kutty -f training/kutty/Modelfile.
+ 

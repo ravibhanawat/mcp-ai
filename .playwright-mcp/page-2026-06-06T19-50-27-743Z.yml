@@ -1,0 +1,86 @@
+- generic [ref=e338]:
+  - generic [ref=e339]:
+    - button "Expand sidebar" [ref=e341] [cursor=pointer]:
+      - img [ref=e342]
+    - generic "CLAVIS" [ref=e343]:
+      - img [ref=e344]
+    - button "Search chats" [ref=e350] [cursor=pointer]:
+      - img [ref=e351]
+    - button "New chat" [ref=e354] [cursor=pointer]:
+      - img [ref=e355]
+    - generic [ref=e356]:
+      - generic "System Administrator" [ref=e357] [cursor=pointer]: S
+      - button "Sign out" [ref=e358] [cursor=pointer]:
+        - img [ref=e359]
+  - generic [ref=e362]:
+    - banner [ref=e363]:
+      - generic [ref=e364]:
+        - img [ref=e366]
+        - generic [ref=e372]: CLAVIS
+      - generic [ref=e373]:
+        - generic [ref=e376]: LLM Online
+        - generic [ref=e377]:
+          - generic [ref=e378]: S
+          - generic [ref=e379]:
+            - generic [ref=e380]: System Administrator
+            - generic [ref=e381]: Administrator
+          - button "Sign out" [ref=e382] [cursor=pointer]:
+            - img [ref=e383]
+        - button "Toggle Light/Dark Theme" [ref=e386] [cursor=pointer]:
+          - img [ref=e387]
+        - button "Configuration" [ref=e389] [cursor=pointer]:
+          - img [ref=e390]
+    - generic [ref=e393]:
+      - generic [ref=e732]:
+        - generic [ref=e734]:
+          - generic [ref=e735]: S
+          - generic [ref=e737]: Check stock level for MAT002 at plant 1000
+        - generic [ref=e739]:
+          - img [ref=e741]
+          - generic [ref=e743]:
+            - group [ref=e744] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e745]
+            - generic [ref=e747]:
+              - paragraph [ref=e748]:
+                - strong [ref=e749]: Stock Level for MAT002 at Plant 1000
+              - paragraph [ref=e750]: We have retrieved the current stock level information for MAT002 at plant 1000.
+              - paragraph [ref=e751]:
+                - strong [ref=e752]: "Key Stock Levels:"
+              - list [ref=e753]:
+                - listitem [ref=e754]: "Unrestricted Stock: 45 EA"
+                - listitem [ref=e755]: "Reserved Stock: 5 EA"
+                - listitem [ref=e756]: "In Transit Stock: 3 EA"
+                - listitem [ref=e757]: "Available to Promise (ATP): 40 EA"
+              - paragraph [ref=e758]:
+                - strong [ref=e759]: "Reorder Point and Replenishment Status:"
+                - text: The reorder point for MAT002 at plant 1000 is set at 10 EA. Based on the current stock levels, there are no immediate replenishment needs.
+              - paragraph [ref=e760]:
+                - strong [ref=e761]: "Important Findings:"
+              - list [ref=e762]:
+                - listitem [ref=e763]: The unrestricted stock level of 45 EA indicates that there is sufficient inventory to meet demand.
+                - listitem [ref=e764]: However, the in-transit stock level of 3 EA may indicate potential delays or disruptions in the supply chain.
+                - listitem [ref=e765]: The available-to-promise (ATP) stock level of 40 EA suggests that there are some stock levels that can be promised to customers within a short timeframe.
+              - paragraph [ref=e766]:
+                - strong [ref=e767]: "Next Steps:"
+                - text: Please review these findings and consider adjusting your inventory management strategies as needed.
+            - button "Copy" [ref=e769] [cursor=pointer]:
+              - img [ref=e770]
+              - text: Copy
+      - generic [ref=e459]:
+        - generic [ref=e460]:
+          - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [active] [ref=e462]
+          - generic [ref=e463]:
+            - generic [ref=e464]:
+              - button "llama3.2" [ref=e466] [cursor=pointer]:
+                - img [ref=e467]
+                - generic [ref=e470]: llama3.2
+                - img [ref=e471]
+              - generic "Attach file" [ref=e474] [cursor=pointer]:
+                - img [ref=e475]
+              - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e477] [cursor=pointer]:
+                - img [ref=e478]
+              - button "Show suggestions" [ref=e480] [cursor=pointer]:
+                - img [ref=e481]
+            - button "Send message" [disabled] [ref=e484] [cursor=pointer]:
+              - img [ref=e773]
+        - generic [ref=e487]: CLAVIS can make mistakes. Verify important results.

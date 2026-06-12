@@ -1,0 +1,101 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - log
+    - log
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - banner "Storybook" [ref=e7]:
+        - heading "Storybook" [level=1] [ref=e8]
+        - img
+        - generic [ref=e12]:
+          - generic [ref=e14]:
+            - link "Skip to content" [ref=e15] [cursor=pointer]:
+              - /url: "#storybook-preview-wrapper"
+            - link "Storybook" [ref=e17] [cursor=pointer]:
+              - /url: ./
+              - img "Storybook" [ref=e18]
+            - switch "Settings" [ref=e23] [cursor=pointer]:
+              - img [ref=e24]
+          - generic [ref=e27]: Search for components
+          - search [ref=e28]:
+            - combobox "Search for components" [ref=e29]:
+              - generic:
+                - img
+              - searchbox "Search for components" [ref=e30]
+              - code:
+                - generic: ⌘
+                - text: K
+          - navigation "Stories" [ref=e32]:
+            - heading "Stories" [level=2] [ref=e33]
+            - generic "Hide Vue stories" [ref=e53]:
+              - button "Vue" [ref=e54] [cursor=pointer]:
+                - img [ref=e56]
+                - generic "Vue" [ref=e58]
+              - button "Extra actions" [ref=e60] [cursor=pointer]:
+                - img [ref=e61]
+            - generic "Hide Solid stories" [ref=e70]:
+              - button "Solid" [ref=e71] [cursor=pointer]:
+                - img [ref=e73]
+                - generic "Solid" [ref=e75]
+              - button "Extra actions" [ref=e77] [cursor=pointer]:
+                - img [ref=e78]
+            - generic "Hide Svelte stories" [ref=e87]:
+              - button "Svelte" [ref=e88] [cursor=pointer]:
+                - img [ref=e90]
+                - generic "Svelte" [ref=e92]
+              - button "Extra actions" [ref=e94] [cursor=pointer]:
+                - img [ref=e95]
+      - separator "Sidebar resize handle" [ref=e104]
+    - generic [ref=e106]:
+      - region "Toolbar" [ref=e107]:
+        - heading "Toolbar" [level=2] [ref=e108]
+        - toolbar [ref=e109]:
+          - generic [ref=e110]:
+            - button "Reload story" [ref=e111] [cursor=pointer]:
+              - img [ref=e112]
+            - switch "Measure tool" [ref=e114] [cursor=pointer]:
+              - img [ref=e115]
+            - switch "Outline tool" [ref=e118] [cursor=pointer]:
+              - img [ref=e119]
+            - button "Viewport size" [ref=e121] [cursor=pointer]:
+              - img [ref=e122]
+          - generic [ref=e126]:
+            - button "Open in isolation mode" [ref=e127] [cursor=pointer]:
+              - img [ref=e128]
+            - switch "Change zoom level" [ref=e133] [cursor=pointer]: 100%
+            - button "Enter full screen" [ref=e134] [cursor=pointer]:
+              - img [ref=e135]
+      - main "Main preview area" [ref=e137]:
+        - heading "Main preview area" [level=2] [ref=e138]
+        - generic [ref=e139]:
+          - progressbar "Content is loading..." [ref=e141]
+          - generic [ref=e142]:
+            - link "Skip to sidebar" [ref=e143] [cursor=pointer]:
+              - /url: "#advanced-markdown--default"
+            - iframe [ref=e147]:
+              
+    - generic [ref=e148]:
+      - separator "Addon panel resize handle" [ref=e149]
+      - region "Addon panel" [ref=e151]:
+        - heading "Addon panel" [level=2] [ref=e152]
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - generic [ref=e155]:
+              - button "Move addon panel to bottom" [ref=e156] [cursor=pointer]:
+                - img [ref=e157]
+              - button "Hide addon panel" [ref=e160] [cursor=pointer]:
+                - img [ref=e161]
+            - generic [ref=e164]:
+              - button "Scroll backward" [disabled] [ref=e166]:
+                - img [ref=e167]
+              - tablist "Available addons" [ref=e170]:
+                - tab "Controls" [ref=e171] [cursor=pointer]:
+                  - generic [ref=e173]: Controls
+                - tab "Actions" [ref=e174] [cursor=pointer]:
+                  - generic [ref=e176]: Actions
+                - tab "Interactions" [ref=e177] [cursor=pointer]:
+                  - generic [ref=e179]: Interactions
+                - tab "Code" [selected] [ref=e180] [cursor=pointer]
+              - button "Scroll forward" [ref=e182] [cursor=pointer]:
+                - img [ref=e183]
+          - tabpanel "Code" [ref=e185]

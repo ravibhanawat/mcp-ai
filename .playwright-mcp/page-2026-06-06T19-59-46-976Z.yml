@@ -1,0 +1,272 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - button "Expand sidebar" [ref=e180] [cursor=pointer]:
+      - img [ref=e181]
+    - generic "CLAVIS" [ref=e8]:
+      - img [ref=e182]
+    - button "Search chats" [ref=e188] [cursor=pointer]:
+      - img [ref=e189]
+    - button "New chat" [ref=e192] [cursor=pointer]:
+      - img [ref=e193]
+    - generic [ref=e21]:
+      - generic "System Administrator" [ref=e22] [cursor=pointer]: S
+      - button "Sign out" [ref=e194] [cursor=pointer]:
+        - img [ref=e195]
+  - generic [ref=e27]:
+    - banner [ref=e28]:
+      - generic [ref=e29]:
+        - img [ref=e31]
+        - generic [ref=e37]: CLAVIS
+      - generic [ref=e38]:
+        - generic [ref=e41]: LLM Online
+        - generic [ref=e42]:
+          - generic [ref=e43]: S
+          - generic [ref=e44]:
+            - generic [ref=e45]: System Administrator
+            - generic [ref=e46]: Administrator
+          - button "Sign out" [ref=e47] [cursor=pointer]:
+            - img [ref=e48]
+        - button "Toggle Light/Dark Theme" [ref=e51] [cursor=pointer]:
+          - img [ref=e52]
+        - button "Configuration" [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+    - generic [ref=e58]:
+      - generic [ref=e154]:
+        - generic [ref=e156]:
+          - generic [ref=e157]: S
+          - generic [ref=e159]: List all open purchase orders
+        - generic [ref=e199]:
+          - generic [ref=e200]: S
+          - generic [ref=e202]: Show all employees
+        - generic [ref=e204]:
+          - img [ref=e206]
+          - generic [ref=e208]:
+            - group [ref=e209] [cursor=pointer]:
+              - generic "› Reasoning — 3 steps" [ref=e210]
+            - paragraph [ref=e213]:
+              - text: Found
+              - strong [ref=e214]: 40 records
+              - text: from
+              - code [ref=e215]: search_employees
+              - text: . Showing all results in the table below.
+            - generic [ref=e216]:
+              - img [ref=e217]
+              - generic [ref=e219]: 40 records
+              - button "View Data" [ref=e220] [cursor=pointer]
+            - button "Copy" [ref=e222] [cursor=pointer]:
+              - img [ref=e223]
+              - text: Copy
+      - generic [ref=e124]:
+        - generic [ref=e125]:
+          - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [active] [ref=e127]
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - button "llama3.2" [ref=e131] [cursor=pointer]:
+                - img [ref=e132]
+                - generic [ref=e135]: llama3.2
+                - img [ref=e136]
+              - generic "Attach file" [ref=e139] [cursor=pointer]:
+                - img [ref=e140]
+              - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e142] [cursor=pointer]:
+                - img [ref=e143]
+              - button "Show suggestions" [ref=e145] [cursor=pointer]:
+                - img [ref=e146]
+            - button "Send message" [disabled] [ref=e149] [cursor=pointer]:
+              - img [ref=e226]
+        - generic [ref=e152]: CLAVIS can make mistakes. Verify important results.
+  - generic [ref=e230]:
+    - generic [ref=e231]:
+      - generic [ref=e232]: Query Results
+      - button "Expand to full screen" [ref=e233] [cursor=pointer]:
+        - img [ref=e234]
+      - button "✕" [ref=e239] [cursor=pointer]
+    - generic [ref=e240]:
+      - button "Table" [ref=e241] [cursor=pointer]
+      - button "Chart" [ref=e242] [cursor=pointer]
+    - generic [ref=e244]:
+      - generic [ref=e245]:
+        - generic [ref=e246]: 40 rows
+        - textbox "Search…" [ref=e247]
+      - table [ref=e249]:
+        - rowgroup [ref=e250]:
+          - row "emp_id name department position grade" [ref=e251]:
+            - columnheader "emp_id" [ref=e252] [cursor=pointer]
+            - columnheader "name" [ref=e253] [cursor=pointer]
+            - columnheader "department" [ref=e254] [cursor=pointer]
+            - columnheader "position" [ref=e255] [cursor=pointer]
+            - columnheader "grade" [ref=e256] [cursor=pointer]
+        - rowgroup [ref=e257]:
+          - row "EMP047 Alok Chatterjee SCM Head Supply Chain L7" [ref=e259]:
+            - cell "EMP047" [ref=e260]
+            - cell "Alok Chatterjee" [ref=e261]
+            - cell "SCM" [ref=e262]
+            - cell "Head Supply Chain" [ref=e263]
+            - cell "L7" [ref=e264]
+          - row "EMP030 Anita Desai Sales VP Sales L7" [ref=e266]:
+            - cell "EMP030" [ref=e267]
+            - cell "Anita Desai" [ref=e268]
+            - cell "Sales" [ref=e269]
+            - cell "VP Sales" [ref=e270]
+            - cell "L7" [ref=e271]
+          - row "EMP055 Anjali Bhattacharya IT Business Analyst L4" [ref=e273]:
+            - cell "EMP055" [ref=e274]
+            - cell "Anjali Bhattacharya" [ref=e275]
+            - cell "IT" [ref=e276]
+            - cell "Business Analyst" [ref=e277]
+            - cell "L4" [ref=e278]
+          - row "EMP062 Arjun Chakraborty R&D Test & Validation Eng L3" [ref=e280]:
+            - cell "EMP062" [ref=e281]
+            - cell "Arjun Chakraborty" [ref=e282]
+            - cell "R&D" [ref=e283]
+            - cell "Test & Validation Eng" [ref=e284]
+            - cell "L3" [ref=e285]
+          - row "EMP003 Arun Patel IT DevOps Engineer L3" [ref=e287]:
+            - cell "EMP003" [ref=e288]
+            - cell "Arun Patel" [ref=e289]
+            - cell "IT" [ref=e290]
+            - cell "DevOps Engineer" [ref=e291]
+            - cell "L3" [ref=e292]
+          - row "EMP060 Ashwin Rao Production CNC Programmer L3" [ref=e294]:
+            - cell "EMP060" [ref=e295]
+            - cell "Ashwin Rao" [ref=e296]
+            - cell "Production" [ref=e297]
+            - cell "CNC Programmer" [ref=e298]
+            - cell "L3" [ref=e299]
+          - row "EMP021 Deepak Mehta Finance Finance Manager L5" [ref=e301]:
+            - cell "EMP021" [ref=e302]
+            - cell "Deepak Mehta" [ref=e303]
+            - cell "Finance" [ref=e304]
+            - cell "Finance Manager" [ref=e305]
+            - cell "L5" [ref=e306]
+          - row "EMP052 Divya Krishnamurthy R&D Product Design Lead L5" [ref=e308]:
+            - cell "EMP052" [ref=e309]
+            - cell "Divya Krishnamurthy" [ref=e310]
+            - cell "R&D" [ref=e311]
+            - cell "Product Design Lead" [ref=e312]
+            - cell "L5" [ref=e313]
+          - row "EMP051 Geeta Pillai R&D Principal Research Eng L5" [ref=e315]:
+            - cell "EMP051" [ref=e316]
+            - cell "Geeta Pillai" [ref=e317]
+            - cell "R&D" [ref=e318]
+            - cell "Principal Research Eng" [ref=e319]
+            - cell "L5" [ref=e320]
+          - row "EMP045 Harish Nambiar Production CNC Machine Operator L2" [ref=e322]:
+            - cell "EMP045" [ref=e323]
+            - cell "Harish Nambiar" [ref=e324]
+            - cell "Production" [ref=e325]
+            - cell "CNC Machine Operator" [ref=e326]
+            - cell "L2" [ref=e327]
+          - row "EMP044 Kavitha Venkatesan Production Quality Inspector L2" [ref=e329]:
+            - cell "EMP044" [ref=e330]
+            - cell "Kavitha Venkatesan" [ref=e331]
+            - cell "Production" [ref=e332]
+            - cell "Quality Inspector" [ref=e333]
+            - cell "L2" [ref=e334]
+          - row "EMP004 Kavya Reddy IT Data Analyst L3" [ref=e336]:
+            - cell "EMP004" [ref=e337]
+            - cell "Kavya Reddy" [ref=e338]
+            - cell "IT" [ref=e339]
+            - cell "Data Analyst" [ref=e340]
+            - cell "L3" [ref=e341]
+          - row "EMP053 Kiran Reddy R&D Mechanical Designer L4" [ref=e343]:
+            - cell "EMP053" [ref=e344]
+            - cell "Kiran Reddy" [ref=e345]
+            - cell "R&D" [ref=e346]
+            - cell "Mechanical Designer" [ref=e347]
+            - cell "L4" [ref=e348]
+          - row "EMP066 Kunal Saxena SCM Logistics Coordinator L3" [ref=e350]:
+            - cell "EMP066" [ref=e351]
+            - cell "Kunal Saxena" [ref=e352]
+            - cell "SCM" [ref=e353]
+            - cell "Logistics Coordinator" [ref=e354]
+            - cell "L3" [ref=e355]
+          - row "EMP063 Lakshmi Varma Finance Direct Taxation Spec L4" [ref=e357]:
+            - cell "EMP063" [ref=e358]
+            - cell "Lakshmi Varma" [ref=e359]
+            - cell "Finance" [ref=e360]
+            - cell "Direct Taxation Spec" [ref=e361]
+            - cell "L4" [ref=e362]
+          - row "EMP042 Lata Rao Production QA Manager L5" [ref=e364]:
+            - cell "EMP042" [ref=e365]
+            - cell "Lata Rao" [ref=e366]
+            - cell "Production" [ref=e367]
+            - cell "QA Manager" [ref=e368]
+            - cell "L5" [ref=e369]
+          - row "EMP031 Manoj Tiwari Sales Regional Sales Head L5" [ref=e371]:
+            - cell "EMP031" [ref=e372]
+            - cell "Manoj Tiwari" [ref=e373]
+            - cell "Sales" [ref=e374]
+            - cell "Regional Sales Head" [ref=e375]
+            - cell "L5" [ref=e376]
+          - row "EMP002 Meera Nair IT Senior Software Dev L4" [ref=e378]:
+            - cell "EMP002" [ref=e379]
+            - cell "Meera Nair" [ref=e380]
+            - cell "IT" [ref=e381]
+            - cell "Senior Software Dev" [ref=e382]
+            - cell "L4" [ref=e383]
+          - row "EMP059 Meghna Pillai Sales Product Specialist L3" [ref=e385]:
+            - cell "EMP059" [ref=e386]
+            - cell "Meghna Pillai" [ref=e387]
+            - cell "Sales" [ref=e388]
+            - cell "Product Specialist" [ref=e389]
+            - cell "L3" [ref=e390]
+          - row "EMP061 Nandini Jain IT UI/UX Designer L3" [ref=e392]:
+            - cell "EMP061" [ref=e393]
+            - cell "Nandini Jain" [ref=e394]
+            - cell "IT" [ref=e395]
+            - cell "UI/UX Designer" [ref=e396]
+            - cell "L3" [ref=e397]
+          - row "EMP050 Nitin Bhatt R&D R&D Director L7" [ref=e399]:
+            - cell "EMP050" [ref=e400]
+            - cell "Nitin Bhatt" [ref=e401]
+            - cell "R&D" [ref=e402]
+            - cell "R&D Director" [ref=e403]
+            - cell "L7" [ref=e404]
+          - row "EMP022 Pooja Verma Finance Senior Accountant L4" [ref=e406]:
+            - cell "EMP022" [ref=e407]
+            - cell "Pooja Verma" [ref=e408]
+            - cell "Finance" [ref=e409]
+            - cell "Senior Accountant" [ref=e410]
+            - cell "L4" [ref=e411]
+          - row "EMP054 Prasad Naidu IT Senior DevOps Engineer L4" [ref=e413]:
+            - cell "EMP054" [ref=e414]
+            - cell "Prasad Naidu" [ref=e415]
+            - cell "IT" [ref=e416]
+            - cell "Senior DevOps Engineer" [ref=e417]
+            - cell "L4" [ref=e418]
+          - row "EMP010 Priya Sharma HR Director HR L7" [ref=e420]:
+            - cell "EMP010" [ref=e421]
+            - cell "Priya Sharma" [ref=e422]
+            - cell "HR" [ref=e423]
+            - cell "Director HR" [ref=e424]
+            - cell "L7" [ref=e425]
+          - row "EMP001 Rajesh Kumar IT VP Engineering L7" [ref=e427]:
+            - cell "EMP001" [ref=e428]
+            - cell "Rajesh Kumar" [ref=e429]
+            - cell "IT" [ref=e430]
+            - cell "VP Engineering" [ref=e431]
+            - cell "L7" [ref=e432]
+          - row "EMP011 Ramesh Gupta HR HR Business Partner L4" [ref=e434]:
+            - cell "EMP011" [ref=e435]
+            - cell "Ramesh Gupta" [ref=e436]
+            - cell "HR" [ref=e437]
+            - cell "HR Business Partner" [ref=e438]
+            - cell "L4" [ref=e439]
+          - row "EMP041 Ravi Shankar Production Production Manager L5" [ref=e441]:
+            - cell "EMP041" [ref=e442]
+            - cell "Ravi Shankar" [ref=e443]
+            - cell "Production" [ref=e444]
+            - cell "Production Manager" [ref=e445]
+            - cell "L5" [ref=e446]
+          - row "EMP048 Rekha Gowda SCM Procurement Manager L5" [ref=e448]:
+            - cell "EMP048" [ref=e449]
+            - cell "Rekha Gowda" [ref=e450]
+            - cell "SCM" [ref=e451]
+            - cell "Procurement Manager" [ref=e452]
+            - cell "L5" [ref=e453]
+          - row "EMP056 Rohan Dasgupta Finance Finance Analyst L3" [ref=e455]:
+            - cell "EMP056" [ref=e456]
+            - cell "Rohan Dasgupta" [ref=e457]
+            - cell "Finance" [ref=e458]
+            - cell "Finance Analyst" [ref=e459]
+            - cell "L3" [ref=e460]

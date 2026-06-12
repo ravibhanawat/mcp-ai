@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KUTTY ERP — Login Mockup B (Light)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#1B3254;
+    --gold:#C89B3C;
+    --gold-deep:#a87f28;
+    --ink:#1a2233;
+    --ink-2:#5d6678;
+    --line:rgba(27,50,84,.12);
+    --paper:#ffffff;
+    --font-sans:'Inter',-apple-system,system-ui,sans-serif;
+    --font-display:'Fraunces',Georgia,serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-sans);color:var(--ink);-webkit-font-smoothing:antialiased;
+    background:#F6F1FA;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:100vh;
+  }
+
+  /* ---------- luminous daytime sky ---------- */
+  .bg{position:fixed;inset:0;overflow:hidden;z-index:0}
+  .bg-base{position:absolute;inset:0;
+    background:
+      radial-gradient(60% 50% at 18% 18%, rgba(200,155,60,.18) 0%, transparent 58%),
+      radial-gradient(55% 55% at 85% 22%, rgba(225,165,185,.20) 0%, transparent 60%),
+      radial-gradient(60% 60% at 80% 85%, rgba(130,170,225,.22) 0%, transparent 62%),
+      linear-gradient(155deg, #FCF8F0 0%, #F3ECFA 48%, #E9F1FC 100%);
+  }
+  /* soft pastel light blooms */
+  .bloom{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;mix-blend-mode:normal}
+  .b1{width:560px;height:560px;top:-150px;left:-90px;background:radial-gradient(circle,rgba(200,155,60,.55),transparent 70%);animation:drift1 19s ease-in-out infinite}
+  .b2{width:480px;height:480px;bottom:-150px;right:-70px;background:radial-gradient(circle,rgba(130,170,225,.6),transparent 70%);opacity:.5;animation:drift2 22s ease-in-out infinite}
+  .b3{width:440px;height:440px;top:34%;left:52%;background:radial-gradient(circle,rgba(190,150,225,.5),transparent 70%);opacity:.42;animation:drift1 25s ease-in-out infinite reverse}
+  .b4{width:380px;height:380px;top:6%;left:60%;background:radial-gradient(circle,rgba(228,150,175,.5),transparent 70%);opacity:.4;animation:drift2 27s ease-in-out infinite}
+
+  /* light aurora ribbon */
+  .ribbon{position:absolute;width:180%;height:340px;top:24%;left:-40%;transform:rotate(-17deg);
+    background:radial-gradient(ellipse at center, rgba(255,255,255,.7), rgba(210,200,240,.28) 42%, transparent 72%);
+    filter:blur(46px);mix-blend-mode:screen;opacity:.8;animation:mwPulse 12s ease-in-out infinite}
+
+  /* delicate constellation (faint gold/navy dots) */
+  .stars,.stars2{position:absolute;top:0;left:0;border-radius:50%;background:transparent}
+  .stars{width:2px;height:2px;animation:starDrift 130s linear infinite, twinkle 5s ease-in-out infinite}
+  .stars2{width:2px;height:2px;animation:starDrift 80s linear infinite, twinkle 6s ease-in-out infinite .6s}
+  .stars::after,.stars2::after{content:" ";position:absolute;top:2000px;left:0;width:inherit;height:inherit;border-radius:50%;background:transparent;box-shadow:inherit}
+
+  /* gentle floating motes */
+  .pt{position:absolute;width:5px;height:5px;border-radius:50%;background:rgba(200,155,60,.5);opacity:.5;box-shadow:0 0 10px rgba(200,155,60,.5)}
+  .pt:nth-child(1){top:20%;left:24%;animation:floatY 7s ease-in-out infinite}
+  .pt:nth-child(2){top:68%;left:18%;animation:floatY 9s ease-in-out infinite 1s;background:rgba(130,170,225,.55);box-shadow:0 0 10px rgba(130,170,225,.55)}
+  .pt:nth-child(3){top:30%;left:78%;animation:floatY 8s ease-in-out infinite .5s}
+  .pt:nth-child(4){top:80%;left:72%;animation:floatY 10s ease-in-out infinite 1.4s;background:rgba(190,150,225,.55);box-shadow:0 0 10px rgba(190,150,225,.55)}
+  .pt:nth-child(5){top:12%;left:62%;animation:floatY 6.5s ease-in-out infinite .8s}
+
+  .grid{position:absolute;inset:0;opacity:.5;
+    background-image:linear-gradient(rgba(27,50,84,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(27,50,84,.05) 1px,transparent 1px);
+    background-size:54px 54px;mask-image:radial-gradient(80% 80% at 50% 45%,#000 35%,transparent 85%)}
+  .grain{position:absolute;inset:0;opacity:.035;pointer-events:none;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  /* ---------- card ---------- */
+  .card{
+    position:relative;z-index:2;width:430px;max-width:calc(100vw - 40px);
+    background:rgba(255,255,255,.72);
+    border:1px solid rgba(255,255,255,.85);border-radius:24px;
+    padding:44px 46px;backdrop-filter:blur(20px) saturate(135%);-webkit-backdrop-filter:blur(20px) saturate(135%);
+    box-shadow:0 40px 90px -34px rgba(27,50,84,.32), 0 2px 10px rgba(27,50,84,.06), inset 0 1px 0 rgba(255,255,255,.9);
+    animation:rise .8s cubic-bezier(.2,.7,.2,1) both;
+  }
+  .card::before{content:"";position:absolute;top:-1px;left:34px;right:34px;height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.8}
+
+  .logo-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:26px}
+  .halo-mark{position:relative;width:62px;height:58px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+  .halo-mark .halo{position:absolute;width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle,rgba(200,155,60,.30),transparent 65%);animation:glow 4.5s ease-in-out infinite}
+  .halo-mark svg{position:relative;z-index:2;animation:float 5s ease-in-out infinite;filter:drop-shadow(0 8px 18px rgba(27,50,84,.22))}
+  .wordmark{font-family:var(--font-display);font-size:25px;font-weight:600;letter-spacing:.3px;color:var(--ink)}
+  .wordmark b{color:var(--gold-deep);font-weight:600}
+  .tagline{font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-2);margin-top:7px}
+
+  form{display:flex;flex-direction:column;gap:15px;margin-top:6px}
+  .field{position:relative}
+  label.lbl{display:block;font-size:11.5px;font-weight:600;color:var(--ink-2);margin-bottom:7px;letter-spacing:.04em;text-transform:uppercase}
+  .inp{
+    width:100%;height:50px;border:1.5px solid var(--line);border-radius:12px;padding:0 16px;
+    font-size:14px;font-family:var(--font-sans);color:var(--ink);background:rgba(255,255,255,.85);
+    outline:none;transition:border-color .2s,box-shadow .2s,background .2s;
+  }
+  .inp::placeholder{color:#9aa2b2}
+  .inp:focus{border-color:var(--navy);background:#fff;box-shadow:0 0 0 4px rgba(27,50,84,.1)}
+  .pw-toggle{position:absolute;right:6px;top:30px;height:40px;padding:0 12px;border:none;background:none;
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;font-family:var(--font-sans)}
+  .pw-toggle:hover{color:var(--navy);background:rgba(27,50,84,.06)}
+
+  .row{display:flex;align-items:center;justify-content:space-between;margin-top:-3px}
+  .remember{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+  .remember input{accent-color:var(--navy);width:15px;height:15px}
+  .link{font-size:12.5px;font-weight:600;color:var(--navy);text-decoration:none}
+  .link:hover{text-decoration:underline}
+
+  .btn{
+    height:52px;margin-top:6px;border:none;border-radius:12px;cursor:pointer;
+    background:var(--navy);color:#fff;
+    font-family:var(--font-sans);font-size:14.5px;font-weight:600;letter-spacing:.02em;
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    box-shadow:0 12px 26px -10px rgba(27,50,84,.5);transition:transform .12s,box-shadow .2s,background .2s;
+  }
+  .btn:hover{background:#16294a;box-shadow:0 16px 32px -10px rgba(27,50,84,.55)}
+  .btn:active{transform:translateY(1px)}
+  .btn .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+
+  .demo{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+  .demo-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:10px}
+  .demo-row{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-family:var(--font-mono);font-size:11px;color:var(--ink-2);
+    background:rgba(255,255,255,.65);border:1px solid var(--line);border-radius:8px;padding:5px 11px;cursor:pointer;transition:all .15s}
+  .chip:hover{color:var(--navy);border-color:var(--navy);background:#fff}
+
+  .foot{position:fixed;bottom:22px;left:0;right:0;text-align:center;font-size:11px;color:#97a0b2;letter-spacing:.04em;z-index:2}
+
+  @keyframes rise{from{opacity:0;transform:translateY(26px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+  @keyframes floatY{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-26px);opacity:.9}}
+  @keyframes glow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.9;transform:scale(1.1)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(55px,38px)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-48px,-28px)}}
+  @keyframes starDrift{from{transform:translateY(0)}to{transform:translateY(-2000px)}}
+  @keyframes twinkle{0%,100%{opacity:.3}50%{opacity:.85}}
+  @keyframes mwPulse{0%,100%{opacity:.65}50%{opacity:.9}}
+
+  @media(max-width:480px){.card{padding:36px 26px}}
+</style>
+</head>
+<body>
+  <div class="bg">
+    <div class="bg-base"></div>
+    <div class="ribbon"></div>
+    <div class="bloom b1"></div><div class="bloom b2"></div><div class="bloom b3"></div><div class="bloom b4"></div>
+    <div class="stars" id="stars"></div>
+    <div class="stars2" id="stars2"></div>
+    <div class="grid"></div>
+    <span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span>
+    <div class="grain"></div>
+  </div>
+
+  <main class="card">
+    <div class="logo-wrap">
+      <div class="halo-mark">
+        <div class="halo"></div>
+        <svg width="56" height="52" viewBox="0 0 58 54" fill="none">
+          <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#1B3254"/>
+          <circle cx="22" cy="27" r="9" fill="#C89B3C"/><circle cx="22" cy="27" r="4" fill="#1B3254"/>
+          <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+          <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+          <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
+        </svg>
+      </div>
+      <div class="wordmark">KUTTY <b>ERP</b></div>
+      <div class="tagline">Enterprise ERP Intelligence</div>
+    </div>
+
+    <form onsubmit="return false">
+      <div class="field">
+        <label class="lbl">User ID</label>
+        <input class="inp" placeholder="Enter your user ID" autocomplete="username" autofocus />
+      </div>
+      <div class="field">
+        <label class="lbl">Password</label>
+        <input class="inp" type="password" placeholder="Enter your password" autocomplete="current-password" id="pw" />
+        <button type="button" class="pw-toggle" onclick="var p=document.getElementById('pw');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'Show':'Hide'">Show</button>
+      </div>
+      <div class="row">
+        <label class="remember"><input type="checkbox" /> Remember me</label>
+        <a class="link" href="#">Need help?</a>
+      </div>
+      <button class="btn" type="submit"><span class="spin" style="display:none"></span> Sign In</button>
+    </form>
+
+    <div class="demo">
+      <div class="demo-label">Demo accounts</div>
+      <div class="demo-row">
+        <button class="chip">admin</button>
+        <button class="chip">fi_user</button>
+        <button class="chip">hr_user</button>
+        <button class="chip">demo</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="foot">© KUTTY 2026 · Secure access via CLAVIS</div>
+
+  <script>
+    // Faint constellation across a 2000x2000 field (loops via ::after).
+    function field(id, count, color){
+      var el = document.getElementById(id), sh = [];
+      for (var i = 0; i < count; i++){
+        sh.push(Math.floor(Math.random()*2000) + 'px ' + Math.floor(Math.random()*2000) + 'px ' + color);
+      }
+      el.style.boxShadow = sh.join(',');
+    }
+    field('stars', 140, 'rgba(200,155,60,.55)');   // soft gold points
+    field('stars2', 90, 'rgba(27,50,84,.35)');     // faint navy points
+  </script>
+</body>
+</html>

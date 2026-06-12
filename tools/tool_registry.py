@@ -53,6 +53,7 @@ SAP_SOURCES: dict[str, dict] = {
     "generate_abap_code":       {"bapi": "N/A",  "tcode": "SE38",  "table": "N/A",    "verify": "T-code SE38 → ABAP Editor"},
     # Knowledge Base
     "search_sap_docs":          {"bapi": "N/A",  "tcode": "N/A",   "table": "N/A",    "verify": "SAP Knowledge Base (built-in)"},
+    "search_sap_tickets":       {"bapi": "N/A",  "tcode": "N/A",   "table": "N/A",    "verify": "Kutty ticket index (RAG over SAP ticket export)"},
     # RE — Receipt (ZFI_RECEIPT_PARK / ZFI_RECEIPT_POST)
     "get_customer_unit_outstanding": {"bapi": "Z_RE_GET_OUTSTANDING",  "tcode": "ZFI_RECEIPT_PARK", "table": "re_customers/re_milestones", "verify": "T-code ZFI_RECEIPT_PARK → Receipt Creation Screen"},
     "calculate_receipt_allocation":  {"bapi": "Z_RE_CALC_ALLOCATION",  "tcode": "ZFI_RECEIPT_PARK", "table": "re_milestones",              "verify": "T-code ZFI_RECEIPT_PARK → FIFO Allocation Logic"},
@@ -655,7 +656,72 @@ TOOLS = [
             "required": ["query"]
         }
     },
+    # ── Kutty — RAG over the SAP consulting ticket backlog ──
+    {
+        "name": "search_sap_tickets",
+        "description": (
+            "Search the SAP consulting ticket/project backlog (Kutty RAG index). "
+            "Use when the user asks about delivery tickets, RICEFW items, project "
+            "status, consultants, efforts, SLAs, or customers in the ticket export "
+            "— e.g. 'open ABAP tickets for Rayzon', 'WIP MM tickets', "
+            "'how many reports are pending for Sona Support'."
+        ),
+        "module": "Tickets",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural-language search over the SAP ticket backlog"},
+                "k": {"type": "integer", "description": "Max tickets to return (default 8)"},
+                "status": {
+                    "type": "string",
+                    "description": "Optional status filter: open, completed, wip, dropped, hold, testing, "
+                                   "or a canonical status (e.g. 'Raised to SAP'). Omit to infer from the query."
+                }
+            },
+            "required": ["query"]
+        }
+    },
 ]
+
+# ─────────────────────────────────────────
+# Kutty ticket search wrapper
+# ─────────────────────────────────────────
+def search_sap_tickets(query: str, k: int = 8, status: str | None = None) -> dict:
+    """RAG search over the SAP consulting ticket backlog via the Kutty index.
+    Returns a list of matching tickets; retrieval reasoning runs in
+    training/kutty/retriever.py (lazy import to avoid load-time coupling).
+
+    `status` optionally restricts results (e.g. 'open', 'completed', 'wip',
+    'dropped'); when omitted, status intent is inferred from the query."""
+    try:
+        from training.kutty.retriever import retrieve
+    except Exception as e:
+        return {"status": "ERROR", "message": f"Kutty retriever unavailable: {e}"}
+    try:
+        tickets = retrieve(query, k=int(k) if k else 8, status=status)
+    except FileNotFoundError as e:
+        return {"status": "ERROR", "message": str(e)}
+    except Exception as e:
+        return {"status": "ERROR", "message": f"Ticket search failed: {e}"}
+    try:
+        from core.security import redact_secrets
+    except Exception:
+        redact_secrets = lambda x: x  # noqa: E731
+    return {
+        "status": "OK",
+        "count": len(tickets),
+        "tickets": [
+            {
+                "ticket_id": t.get("ticket_id", ""),
+                "title": redact_secrets(t.get("title", "")),
+                "module": t.get("module", ""),
+                "project": t.get("project", ""),
+                "status": t.get("status", ""),
+            }
+            for t in tickets
+        ],
+    }
+
 
 # ─────────────────────────────────────────
 # FUNCTION EXECUTOR
@@ -700,6 +766,8 @@ FUNCTION_MAP = {
     "generate_abap_code": abap.generate_abap_code,
     # Knowledge Base
     "search_sap_docs": search_sap_docs,
+    # Kutty — ticket backlog RAG
+    "search_sap_tickets": search_sap_tickets,
     # RE — Receipt
     "get_customer_unit_outstanding": receipt.get_customer_unit_outstanding,
     "calculate_receipt_allocation":  receipt.calculate_receipt_allocation,

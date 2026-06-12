@@ -47,3 +47,4 @@ logs/
 training/
 *.pkl
 *.model
+docs/**

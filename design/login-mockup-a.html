@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KUTTY ERP — Login Mockup A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#1B3254;
+    --navy-deep:#0f2138;
+    --navy-soft:#24426e;
+    --gold:#C89B3C;
+    --gold-soft:#e0c074;
+    --beige:#EDE8DC;
+    --beige-card:#F6F2E9;
+    --ink:#1a1a1a;
+    --ink-2:#5a5446;
+    --line:#E0D8C7;
+    --font-sans:'Inter',-apple-system,system-ui,sans-serif;
+    --font-display:'Fraunces',Georgia,serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:var(--font-sans);color:var(--ink);background:var(--beige);-webkit-font-smoothing:antialiased}
+
+  .lg-page{display:grid;grid-template-columns:1fr 1.05fr;min-height:100vh}
+
+  /* ---------- LEFT: form ---------- */
+  .lg-form-col{
+    position:relative;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:48px 40px;
+    background:
+      radial-gradient(120% 90% at 0% 0%, #F3EFE5 0%, var(--beige) 55%),
+      var(--beige);
+    overflow:hidden;
+  }
+  /* subtle grain */
+  .lg-form-col::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+  .lg-form-inner{position:relative;width:100%;max-width:380px;animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+
+  .lg-logo{display:flex;align-items:center;gap:11px;margin-bottom:40px}
+  .lg-logo-mark{width:42px;height:39px;flex:0 0 auto}
+  .lg-logo-text{font-family:var(--font-display);font-size:21px;font-weight:600;letter-spacing:.2px}
+  .lg-logo-text b{color:var(--gold);font-weight:600}
+
+  .lg-eyebrow{font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-2);margin-bottom:14px}
+  .lg-head{font-family:var(--font-display);font-size:38px;line-height:1.08;font-weight:500;letter-spacing:-.5px;margin-bottom:10px}
+  .lg-head em{font-style:italic;color:var(--gold)}
+  .lg-desc{font-size:14px;color:var(--ink-2);line-height:1.6;margin-bottom:34px;max-width:320px}
+
+  .lg-form{display:flex;flex-direction:column;gap:16px}
+  .lg-field{position:relative}
+  .lg-label{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:7px;letter-spacing:.01em}
+  .lg-input{
+    width:100%;height:50px;border:1.5px solid var(--line);border-radius:12px;
+    padding:0 16px;font-size:14px;font-family:var(--font-sans);color:var(--ink);
+    background:#FFFDF9;outline:none;transition:border-color .2s,box-shadow .2s,background .2s;
+  }
+  .lg-input::placeholder{color:#B3A88F}
+  .lg-input:focus{border-color:var(--navy);background:#fff;box-shadow:0 0 0 4px rgba(27,50,84,.08)}
+  .lg-pw-toggle{
+    position:absolute;right:6px;top:31px;height:38px;padding:0 12px;border:none;background:none;
+    color:var(--ink-2);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;font-family:var(--font-sans);
+  }
+  .lg-pw-toggle:hover{color:var(--navy);background:rgba(27,50,84,.06)}
+
+  .lg-row{display:flex;align-items:center;justify-content:space-between;margin-top:-2px}
+  .lg-remember{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);cursor:pointer}
+  .lg-remember input{accent-color:var(--navy);width:15px;height:15px}
+  .lg-link{font-size:12.5px;font-weight:600;color:var(--navy);text-decoration:none}
+  .lg-link:hover{text-decoration:underline}
+
+  .lg-btn{
+    height:52px;margin-top:6px;border:none;border-radius:12px;cursor:pointer;
+    background:var(--navy);color:#fff;font-family:var(--font-sans);font-size:14.5px;font-weight:600;letter-spacing:.02em;
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    box-shadow:0 8px 22px -8px rgba(27,50,84,.55);transition:transform .12s,box-shadow .2s,background .2s;
+  }
+  .lg-btn:hover{background:#16294a;box-shadow:0 12px 26px -8px rgba(27,50,84,.6)}
+  .lg-btn:active{transform:translateY(1px)}
+  .lg-btn .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+
+  .lg-demo{margin-top:30px;border-top:1px solid var(--line);padding-top:18px}
+  .lg-demo-label{font-size:11px;color:var(--ink-2);letter-spacing:.04em;margin-bottom:10px}
+  .lg-demo-row{display:flex;flex-wrap:wrap;gap:7px}
+  .lg-chip{
+    font-family:var(--font-mono);font-size:11px;color:var(--ink-2);
+    background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:8px;
+    padding:5px 11px;cursor:pointer;transition:all .15s;
+  }
+  .lg-chip:hover{color:var(--navy);border-color:var(--navy);background:#fff}
+
+  .lg-foot{position:absolute;bottom:26px;font-size:11px;color:#A99F88;letter-spacing:.03em}
+
+  /* ---------- RIGHT: brand panel ---------- */
+  .lg-brand{
+    position:relative;overflow:hidden;color:#fff;
+    background:
+      radial-gradient(90% 70% at 80% 15%, rgba(200,155,60,.22) 0%, transparent 55%),
+      radial-gradient(80% 80% at 10% 90%, rgba(36,66,110,.9) 0%, transparent 60%),
+      linear-gradient(155deg, var(--navy) 0%, var(--navy-deep) 100%);
+  }
+  .lg-brand::after{ /* grain */
+    content:"";position:absolute;inset:0;opacity:.06;pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .lg-grid-lines{position:absolute;inset:0;opacity:.5;
+    background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+    background-size:46px 46px;mask-image:radial-gradient(70% 70% at 70% 30%,#000 30%,transparent 80%)}
+
+  .lg-brand-inner{position:relative;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:54px 56px;z-index:2}
+
+  .lg-brand-top{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+  .lg-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);animation:pulseDot 2.4s ease-in-out infinite}
+
+  .lg-stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative}
+
+  /* halo + logo */
+  .lg-halo{position:absolute;width:340px;height:340px;border-radius:50%;
+    background:radial-gradient(circle, rgba(200,155,60,.30) 0%, transparent 65%);
+    animation:glow 4.5s ease-in-out infinite}
+  .lg-bigmark{position:relative;z-index:3;width:128px;height:120px;animation:float 5s ease-in-out infinite;filter:drop-shadow(0 18px 40px rgba(0,0,0,.45))}
+
+  /* floating data cards */
+  .lg-card-fly{position:absolute;border-radius:14px;background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(6px);
+    padding:13px 15px;box-shadow:0 14px 40px -12px rgba(0,0,0,.5)}
+  .lg-c1{top:14%;left:6%;width:158px;animation:float 6s ease-in-out infinite}
+  .lg-c2{bottom:16%;right:4%;width:172px;animation:float 7s ease-in-out infinite .8s}
+  .lg-c3{bottom:30%;left:2%;width:120px;animation:float 6.5s ease-in-out infinite .4s}
+  .lg-card-fly .t{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:7px}
+  .lg-card-fly .v{font-family:var(--font-display);font-size:22px;font-weight:600}
+  .lg-card-fly .v small{font-size:12px;color:var(--gold-soft);font-family:var(--font-sans);margin-left:5px}
+  .lg-bars{display:flex;align-items:flex-end;gap:4px;height:26px;margin-top:8px}
+  .lg-bars i{flex:1;background:linear-gradient(var(--gold-soft),var(--gold));border-radius:2px;opacity:.85;animation:bar 2.6s ease-in-out infinite}
+  .lg-bars i:nth-child(1){height:40%;animation-delay:0s}
+  .lg-bars i:nth-child(2){height:75%;animation-delay:.2s}
+  .lg-bars i:nth-child(3){height:55%;animation-delay:.4s}
+  .lg-bars i:nth-child(4){height:90%;animation-delay:.6s}
+  .lg-bars i:nth-child(5){height:65%;animation-delay:.8s}
+  .lg-spark{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .lg-spark svg{display:block}
+
+  .lg-brand-bottom{position:relative}
+  .lg-bhead{font-family:var(--font-display);font-size:34px;line-height:1.12;font-weight:500;letter-spacing:-.4px;max-width:420px;margin-bottom:14px}
+  .lg-bhead em{font-style:italic;color:var(--gold-soft)}
+  .lg-bsub{font-size:13.5px;line-height:1.65;color:rgba(255,255,255,.62);max-width:400px}
+  .lg-pills{display:flex;gap:8px;margin-top:22px}
+  .lg-pill{font-size:11px;letter-spacing:.05em;color:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 13px}
+
+  @keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  @keyframes glow{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+  @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes bar{0%,100%{transform:scaleY(.7)}50%{transform:scaleY(1)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media(max-width:880px){
+    .lg-page{grid-template-columns:1fr}
+    .lg-brand{display:none}
+    .lg-form-col{padding:40px 24px}
+  }
+</style>
+</head>
+<body>
+<div class="lg-page">
+
+  <!-- LEFT: form -->
+  <section class="lg-form-col">
+    <div class="lg-form-inner">
+      <div class="lg-logo">
+        <svg class="lg-logo-mark" viewBox="0 0 58 54" fill="none">
+          <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#1B3254"/>
+          <circle cx="22" cy="27" r="9" fill="#C89B3C"/><circle cx="22" cy="27" r="4" fill="#1B3254"/>
+          <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+          <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+          <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
+        </svg>
+        <span class="lg-logo-text">KUTTY <b>ERP</b></span>
+      </div>
+
+      <p class="lg-eyebrow">Enterprise ERP Intelligence</p>
+      <h1 class="lg-head">Welcome <em>back.</em></h1>
+      <p class="lg-desc">Sign in to orchestrate finance, HR and operations through one intelligent workspace.</p>
+
+      <form class="lg-form" onsubmit="return false">
+        <div class="lg-field">
+          <label class="lg-label">User ID</label>
+          <input class="lg-input" placeholder="Enter your user ID" autocomplete="username" autofocus />
+        </div>
+        <div class="lg-field">
+          <label class="lg-label">Password</label>
+          <input class="lg-input" type="password" placeholder="Enter your password" autocomplete="current-password" id="pw" />
+          <button type="button" class="lg-pw-toggle" onclick="var p=document.getElementById('pw');p.type=p.type==='password'?'text':'password';this.textContent=p.type==='password'?'Show':'Hide'">Show</button>
+        </div>
+        <div class="lg-row">
+          <label class="lg-remember"><input type="checkbox" /> Remember me</label>
+          <a class="lg-link" href="#">Need help?</a>
+        </div>
+        <button class="lg-btn" type="submit"><span class="spin" style="display:none"></span> Sign In</button>
+      </form>
+
+      <div class="lg-demo">
+        <p class="lg-demo-label">Demo accounts</p>
+        <div class="lg-demo-row">
+          <button class="lg-chip">admin</button>
+          <button class="lg-chip">fi_user</button>
+          <button class="lg-chip">hr_user</button>
+          <button class="lg-chip">demo</button>
+        </div>
+      </div>
+    </div>
+    <div class="lg-foot">© KUTTY 2026 · Enterprise ERP Intelligence</div>
+  </section>
+
+  <!-- RIGHT: brand panel -->
+  <aside class="lg-brand">
+    <div class="lg-grid-lines"></div>
+    <div class="lg-brand-inner">
+      <div class="lg-brand-top"><span class="lg-dot"></span> CLAVIS · Secure Access</div>
+
+      <div class="lg-stage">
+        <div class="lg-halo"></div>
+        <svg class="lg-bigmark" viewBox="0 0 58 54" fill="none">
+          <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#24426e" stroke="#C89B3C" stroke-width="1.2"/>
+          <circle cx="22" cy="27" r="9" fill="#C89B3C"/><circle cx="22" cy="27" r="4" fill="#1B3254"/>
+          <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+          <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+          <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
+        </svg>
+
+        <div class="lg-card-fly lg-c1">
+          <div class="t">Cash Position</div>
+          <div class="v">₹4.2<small>Cr</small></div>
+          <div class="lg-bars"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="lg-card-fly lg-c2">
+          <div class="t">Open Tickets</div>
+          <div class="v">128<small>−12%</small></div>
+          <div class="lg-spark">
+            <svg width="120" height="22" viewBox="0 0 120 22" fill="none">
+              <path d="M0 16 L20 12 L40 15 L60 6 L80 10 L100 3 L120 7" stroke="#e0c074" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+        <div class="lg-card-fly lg-c3">
+          <div class="t">Approvals</div>
+          <div class="v">37</div>
+        </div>
+      </div>
+
+      <div class="lg-brand-bottom">
+        <h2 class="lg-bhead">One workspace for <em>every</em> enterprise decision.</h2>
+        <p class="lg-bsub">Ask in plain language. KUTTY reasons across your SAP modules and returns answers, charts and actions in seconds.</p>
+        <div class="lg-pills">
+          <span class="lg-pill">Finance</span>
+          <span class="lg-pill">Human Resources</span>
+          <span class="lg-pill">Operations</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+</body>
+</html>

@@ -16,7 +16,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
  */
 export async function sendMessage(
   text,
-  { token, onTokenRefresh, sessionId = 'default', clarificationAnswer = null, model = 'llama3.2', userInitial = 'U' } = {}
+  { token, onTokenRefresh, sessionId = 'default', clarificationAnswer = null, model = 'kutty', userInitial = 'U' } = {}
 ) {
   const store = useChatStore.getState()
   store.resetStreamState()
@@ -63,7 +63,7 @@ export async function sendMessage(
     for await (const { type, payload } of parseSSE(res)) {
       switch (type) {
         case 'status':
-          store.setCurrentPhase(payload.phase)
+          store.appendStatusStep(payload.step || payload.phase, payload.phase)
           break
 
         case 'intent':

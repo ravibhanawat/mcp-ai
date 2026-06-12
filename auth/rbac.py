@@ -5,16 +5,18 @@ Finance users cannot access HR salary data, etc.
 Each role maps to specific SAP modules.
 """
 
-# Maps role name → list of SAP modules accessible
+# Maps role name → list of SAP modules accessible.
+# "tickets" = the Kutty ticket-backlog RAG search (cross-module delivery data),
+# granted to every data role; read_only stays general-questions-only.
 ROLE_MODULES: dict[str, list[str]] = {
-    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap", "receipt"],
-    "fi_co_analyst":  ["fi_co"],
-    "mm_analyst":     ["mm"],
-    "sd_analyst":     ["sd"],
-    "hr_manager":     ["hr"],
-    "pp_planner":     ["pp"],
-    "abap_developer": ["abap"],
-    "re_analyst":     ["sd", "fi_co", "receipt", "fi_co_re"],   # Alembic RE sales team
+    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap", "receipt", "tickets"],
+    "fi_co_analyst":  ["fi_co", "tickets"],
+    "mm_analyst":     ["mm", "tickets"],
+    "sd_analyst":     ["sd", "tickets"],
+    "hr_manager":     ["hr", "tickets"],
+    "pp_planner":     ["pp", "tickets"],
+    "abap_developer": ["abap", "tickets"],
+    "re_analyst":     ["sd", "fi_co", "receipt", "fi_co_re", "tickets"],   # Alembic RE sales team
     "read_only":      [],   # general questions only, no SAP data
 }
 
@@ -84,6 +86,9 @@ MODULE_TOOLS: dict[str, list[str]] = {
         "get_gl_posting_for_receipt",
         "get_customer_ledger",
         "get_tds_certificate_data",
+    ],
+    "tickets": [
+        "search_sap_tickets",
     ],
 }
 

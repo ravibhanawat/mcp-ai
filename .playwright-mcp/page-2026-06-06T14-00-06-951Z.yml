@@ -1,0 +1,192 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - button "Expand sidebar" [ref=e494] [cursor=pointer]:
+      - img [ref=e495]
+    - generic "CLAVIS" [ref=e496]:
+      - img [ref=e497]
+    - button "Search chats" [ref=e503] [cursor=pointer]:
+      - img [ref=e504]
+    - button "New chat" [ref=e507] [cursor=pointer]:
+      - img [ref=e508]
+    - generic [ref=e25]:
+      - generic "System Administrator" [ref=e509] [cursor=pointer]: S
+      - button "Sign out" [ref=e510] [cursor=pointer]:
+        - img [ref=e511]
+  - generic [ref=e36]:
+    - banner [ref=e37]:
+      - generic [ref=e38]:
+        - img [ref=e40]
+        - generic [ref=e46]: CLAVIS
+      - generic [ref=e47]:
+        - generic [ref=e50]: LLM Online
+        - generic [ref=e51]:
+          - generic [ref=e52]: S
+          - generic [ref=e53]:
+            - generic [ref=e54]: System Administrator
+            - generic [ref=e55]: Administrator
+          - button "Sign out" [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+        - button "Toggle Light/Dark Theme" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+        - button "Configuration" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+    - generic [ref=e133]:
+      - generic [ref=e134]:
+        - textbox "Ask anything about SAP… (Enter to send, Shift+Enter for newline)" [active] [ref=e136]
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - button "llama3.2" [ref=e140] [cursor=pointer]:
+              - img [ref=e141]
+              - generic [ref=e144]: llama3.2
+              - img [ref=e145]
+            - generic "Attach file" [ref=e148] [cursor=pointer]:
+              - img [ref=e149]
+            - button "Toggle Auto Research — chains multiple SAP tools automatically" [ref=e151] [cursor=pointer]:
+              - img [ref=e152]
+            - button "Show suggestions" [ref=e154] [cursor=pointer]:
+              - img [ref=e155]
+          - button "Send message" [disabled] [ref=e158] [cursor=pointer]:
+            - img [ref=e514]
+      - generic [ref=e161]: CLAVIS can make mistakes. Verify important results.
+  - generic [ref=e518]:
+    - generic [ref=e519]:
+      - generic [ref=e520]: Query Results
+      - button "✕" [ref=e521] [cursor=pointer]
+    - generic [ref=e522]:
+      - button "Table" [ref=e523] [cursor=pointer]
+      - button "Chart" [ref=e524] [cursor=pointer]
+    - generic [ref=e526]:
+      - generic [ref=e527]:
+        - generic [ref=e528]: 15 rows
+        - textbox "Search…" [ref=e529]
+      - table [ref=e531]:
+        - rowgroup [ref=e532]:
+          - row "id name department budget actual utilization_pct currency" [ref=e533]:
+            - columnheader "id" [ref=e534] [cursor=pointer]
+            - columnheader "name" [ref=e535] [cursor=pointer]
+            - columnheader "department" [ref=e536] [cursor=pointer]
+            - columnheader "budget" [ref=e537] [cursor=pointer]
+            - columnheader "actual" [ref=e538] [cursor=pointer]
+            - columnheader "utilization_pct" [ref=e539] [cursor=pointer]
+            - columnheader "currency" [ref=e540] [cursor=pointer]
+        - rowgroup [ref=e541]:
+          - row "CC100 Information Technology IT 25000000 18750000 75 INR" [ref=e542]:
+            - cell "CC100" [ref=e543]
+            - cell "Information Technology" [ref=e544]
+            - cell "IT" [ref=e545]
+            - cell "25000000" [ref=e546]
+            - cell "18750000" [ref=e547]
+            - cell "75" [ref=e548]
+            - cell "INR" [ref=e549]
+          - row "CC110 IT Infrastructure IT 15000000 12300000 82 INR" [ref=e550]:
+            - cell "CC110" [ref=e551]
+            - cell "IT Infrastructure" [ref=e552]
+            - cell "IT" [ref=e553]
+            - cell "15000000" [ref=e554]
+            - cell "12300000" [ref=e555]
+            - cell "82" [ref=e556]
+            - cell "INR" [ref=e557]
+          - row "CC120 IT Security & Compliance IT 8500000 6200000 72.94 INR" [ref=e558]:
+            - cell "CC120" [ref=e559]
+            - cell "IT Security & Compliance" [ref=e560]
+            - cell "IT" [ref=e561]
+            - cell "8500000" [ref=e562]
+            - cell "6200000" [ref=e563]
+            - cell "72.94" [ref=e564]
+            - cell "INR" [ref=e565]
+          - row "CC200 Finance & Accounts Finance 12000000 9800000 81.67 INR" [ref=e566]:
+            - cell "CC200" [ref=e567]
+            - cell "Finance & Accounts" [ref=e568]
+            - cell "Finance" [ref=e569]
+            - cell "12000000" [ref=e570]
+            - cell "9800000" [ref=e571]
+            - cell "81.67" [ref=e572]
+            - cell "INR" [ref=e573]
+          - row "CC300 Human Resources HR 8500000 7200000 84.71 INR" [ref=e574]:
+            - cell "CC300" [ref=e575]
+            - cell "Human Resources" [ref=e576]
+            - cell "HR" [ref=e577]
+            - cell "8500000" [ref=e578]
+            - cell "7200000" [ref=e579]
+            - cell "84.71" [ref=e580]
+            - cell "INR" [ref=e581]
+          - row "CC400 Manufacturing Operations Production 45000000 41200000 91.56 INR" [ref=e582]:
+            - cell "CC400" [ref=e583]
+            - cell "Manufacturing Operations" [ref=e584]
+            - cell "Production" [ref=e585]
+            - cell "45000000" [ref=e586]
+            - cell "41200000" [ref=e587]
+            - cell "91.56" [ref=e588]
+            - cell "INR" [ref=e589]
+          - row "CC410 Quality Assurance Production 12000000 10800000 90 INR" [ref=e590]:
+            - cell "CC410" [ref=e591]
+            - cell "Quality Assurance" [ref=e592]
+            - cell "Production" [ref=e593]
+            - cell "12000000" [ref=e594]
+            - cell "10800000" [ref=e595]
+            - cell "90" [ref=e596]
+            - cell "INR" [ref=e597]
+          - row "CC420 Tool Room & Maintenance Production 15000000 13200000 88 INR" [ref=e598]:
+            - cell "CC420" [ref=e599]
+            - cell "Tool Room & Maintenance" [ref=e600]
+            - cell "Production" [ref=e601]
+            - cell "15000000" [ref=e602]
+            - cell "13200000" [ref=e603]
+            - cell "88" [ref=e604]
+            - cell "INR" [ref=e605]
+          - row "CC430 Painting & Surface Treatment Production 9000000 8400000 93.33 INR" [ref=e606]:
+            - cell "CC430" [ref=e607]
+            - cell "Painting & Surface Treatment" [ref=e608]
+            - cell "Production" [ref=e609]
+            - cell "9000000" [ref=e610]
+            - cell "8400000" [ref=e611]
+            - cell "93.33" [ref=e612]
+            - cell "INR" [ref=e613]
+          - row "CC500 Sales & Marketing Sales 30000000 27800000 92.67 INR" [ref=e614]:
+            - cell "CC500" [ref=e615]
+            - cell "Sales & Marketing" [ref=e616]
+            - cell "Sales" [ref=e617]
+            - cell "30000000" [ref=e618]
+            - cell "27800000" [ref=e619]
+            - cell "92.67" [ref=e620]
+            - cell "INR" [ref=e621]
+          - row "CC600 Research & Development R&D 20000000 15600000 78 INR" [ref=e622]:
+            - cell "CC600" [ref=e623]
+            - cell "Research & Development" [ref=e624]
+            - cell "R&D" [ref=e625]
+            - cell "20000000" [ref=e626]
+            - cell "15600000" [ref=e627]
+            - cell "78" [ref=e628]
+            - cell "INR" [ref=e629]
+          - row "CC610 Product Design & Engineering R&D 18000000 14200000 78.89 INR" [ref=e630]:
+            - cell "CC610" [ref=e631]
+            - cell "Product Design & Engineering" [ref=e632]
+            - cell "R&D" [ref=e633]
+            - cell "18000000" [ref=e634]
+            - cell "14200000" [ref=e635]
+            - cell "78.89" [ref=e636]
+            - cell "INR" [ref=e637]
+          - row "CC700 Supply Chain & Logistics SCM 18000000 16900000 93.89 INR" [ref=e638]:
+            - cell "CC700" [ref=e639]
+            - cell "Supply Chain & Logistics" [ref=e640]
+            - cell "SCM" [ref=e641]
+            - cell "18000000" [ref=e642]
+            - cell "16900000" [ref=e643]
+            - cell "93.89" [ref=e644]
+            - cell "INR" [ref=e645]
+          - row "CC800 Customer Support Support 6500000 5400000 83.08 INR" [ref=e646]:
+            - cell "CC800" [ref=e647]
+            - cell "Customer Support" [ref=e648]
+            - cell "Support" [ref=e649]
+            - cell "6500000" [ref=e650]
+            - cell "5400000" [ref=e651]
+            - cell "83.08" [ref=e652]
+            - cell "INR" [ref=e653]
+          - row "CC900 Administration Admin 5000000 4100000 82 INR" [ref=e654]:
+            - cell "CC900" [ref=e655]
+            - cell "Administration" [ref=e656]
+            - cell "Admin" [ref=e657]
+            - cell "5000000" [ref=e658]
+            - cell "4100000" [ref=e659]
+            - cell "82" [ref=e660]
+            - cell "INR" [ref=e661]

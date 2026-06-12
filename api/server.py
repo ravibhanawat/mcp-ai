@@ -357,6 +357,7 @@ class ChatRequest(BaseModel):
     model: str = "llama3.2"
     session_id: str = "default"
     clarification_answer: str | None = None
+    ticket_status: str | None = None   # Kutty ticket-backlog status filter (UI dropdown)
 
 class ChatResponse(BaseModel):
     response: str
@@ -369,6 +370,16 @@ class ChatResponse(BaseModel):
     report: dict | None = None      # inline chart/table widget payload
     abap_check: dict | None = None  # inline ABAP code review widget payload
     abap_code: dict | None = None   # inline ABAP code generation widget payload
+
+class KuttyAskRequest(BaseModel):
+    query: str
+    k: int = 8
+    status: str | None = None   # optional status filter (open/completed/wip/…)
+
+class KuttyAskResponse(BaseModel):
+    answer: str
+    tickets: list[dict] = []
+    status: str = "ok"
 
 class ResearchRequest(BaseModel):
     query: str
@@ -641,6 +652,15 @@ async def chat(
     user_roles = current_user.get("roles", [])
     client_ip  = request.client.host if request.client else "unknown"
 
+    # ── Cache lookup (per-user; skipped for clarification follow-ups) ──
+    from core import redis_cache
+    from core.security import redact_secrets, classify_for_cache
+    _cache_key = redis_cache.make_key("chat", body.message, body.model, ",".join(sorted(user_roles)))
+    if not body.clarification_answer:
+        _cached = redis_cache.get("chat", user_id, _cache_key)
+        if _cached:
+            return ChatResponse(**_cached)
+
     import asyncio as _aio
     agent = await _aio.to_thread(_get_agent, f"{user_id}:{body.session_id}")
     if body.model != agent.model:
@@ -731,6 +751,7 @@ async def chat(
                 agent.chat,
                 body.message,
                 get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
+                body.ticket_status,
             )
 
         if tool_called in ("action_plan", "autonomous_agent", "auto_research", "report_agent", "analyze_abap_syntax", "generate_abap_code") and isinstance(tool_result, dict):
@@ -776,6 +797,11 @@ async def chat(
             status=err_status,
         )
 
+    # ── Outbound secret/PII redaction (defense-in-depth) ─────────────────────────
+    # The local model's answer is returned to the user verbatim; scrub any secret
+    # it may have surfaced (tool data, ticket free-text, prompt-injected content).
+    response_text = redact_secrets(response_text)
+
     # ── Persist messages to DB ──────────────────────────────────────────────────
     if _HISTORY_ENABLED and err_status == "ok" and response_text:
         _conv_id = get_or_create_conversation(user_id, body.session_id, body.message)
@@ -791,7 +817,7 @@ async def chat(
                 report=report_payload,
             )
 
-    return ChatResponse(
+    _resp = ChatResponse(
         response=response_text,
         tool_called=tool_called,
         tool_result=tool_result,
@@ -803,6 +829,14 @@ async def chat(
         abap_code=abap_code_payload,
         status="ok",
     )
+
+    # ── Cache store (only classified-safe, successful, non-clarification) ─────────
+    if err_status == "ok" and not body.clarification_answer:
+        _cacheable, _ = classify_for_cache(tool_called=tool_called, text=response_text)
+        if _cacheable:
+            redis_cache.set("chat", user_id, _cache_key, _resp.model_dump())
+
+    return _resp
 
 
 # ── Streaming chat endpoint ────────────────────────────────────────────────────
@@ -971,6 +1005,7 @@ async def chat_stream(
                 body.message,
                 allowed_tools=allowed_tools,
                 clarification_answer=body.clarification_answer,
+                ticket_status=body.ticket_status,
             ):
                 # Intercept events to extract metadata for audit logging and history
                 if event_str.startswith("event: done"):
@@ -1177,6 +1212,53 @@ def my_logs(
 
 
 # ── Session reset ──────────────────────────────────────────────────────────────
+
+@app.post("/kutty/ask", response_model=KuttyAskResponse)
+@limiter.limit("30/minute")
+async def kutty_ask(
+    request: Request,
+    body: KuttyAskRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Kutty — direct RAG over the SAP consulting ticket backlog.
+    Retrieval (PageIndex-style tree search) runs first, then the local model
+    writes a grounded answer over the retrieved ticket cards.
+    RBAC: requires the 'search_sap_tickets' tool (granted via the 'tickets' module).
+    """
+    import asyncio as _aio
+    from core import redis_cache
+    from core.security import classify_for_cache
+    user_id = current_user["user_id"]
+    user_roles = current_user.get("roles", [])
+    if _AUTH_ENABLED and not check_tool_access("search_sap_tickets", user_roles):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: your role does not permit ticket-backlog search.",
+        )
+
+    # ── Cache lookup (per-user key; status is part of the key) ──
+    cache_key = redis_cache.make_key("kutty", body.query, str(body.k), body.status or "")
+    cached = redis_cache.get("kutty_ask", user_id, cache_key)
+    if cached:
+        return KuttyAskResponse(answer=cached["answer"], tickets=cached.get("tickets", []), status="cached")
+
+    try:
+        from training.kutty.kutty import ask as _kutty_ask
+        result = await _aio.to_thread(_kutty_ask, body.query, body.k, body.status)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception:
+        logger.exception("Kutty ask failed for user %s", user_id)
+        raise HTTPException(status_code=500, detail="Kutty request failed. See server logs.")
+
+    # ── Cache store (only if classified safe) ──
+    cacheable, _reason = classify_for_cache(tool_called="search_sap_tickets", text=result["answer"])
+    if cacheable:
+        redis_cache.set("kutty_ask", user_id, cache_key,
+                        {"answer": result["answer"], "tickets": result["tickets"]})
+    return KuttyAskResponse(answer=result["answer"], tickets=result["tickets"], status="ok")
+
 
 @app.post("/reset")
 def reset(request: ChatRequest | None = None, current_user: dict = Depends(get_current_user)):

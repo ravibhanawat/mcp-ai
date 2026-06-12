@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import './App.css'
 import { VList } from 'virtua'
 import ReportWidget from './ReportWidget'
@@ -102,7 +102,7 @@ const MODULES = [
   },
 ]
 
-const MODELS = ['llama3.2', 'llama3.1', 'mistral', 'gemma2', 'codellama']
+const MODELS = ['kutty', 'llama3.2', 'llama3.1', 'mistral', 'gemma2', 'codellama']
 const AUTH_TYPES = [
   { value: 'basic', label: 'Basic Auth' },
   { value: 'oauth2', label: 'OAuth 2.0' },
@@ -1430,7 +1430,7 @@ function TypingIndicator() {
     <div className="typing-row">
       <div className="msg-avatar bot-av">AI</div>
       <div className="typing-bubble">
-        <ShiningText text="clavis is thinking..." />
+        <ShiningText text="Kutty is thinking..." />
       </div>
     </div>
   )
@@ -1987,103 +1987,55 @@ function SettingsModal({ onClose, currentUser }) {
 
 // ─── LoginScreen ──────────────────────────────────────────────────────────────
 
-function LoginCharSvg({ type = 'left', floatDelay = '0s' }) {
-  if (type === 'right') {
-    return (
-      <svg width="215" height="335" viewBox="0 0 215 335" fill="none">
-        {/* Card backdrop */}
-        <rect x="15" y="45" width="185" height="245" rx="16" fill="white" stroke="#DDD5C3" strokeWidth="1.5"/>
-        {/* Header label */}
-        <rect x="30" y="62" width="55" height="8" rx="4" fill="#0070D2" fillOpacity="0.2"/>
-        <rect x="30" y="78" width="105" height="6" rx="3" fill="#f4f4f5"/>
-        {/* Status badges */}
-        <rect x="30" y="94" width="40" height="12" rx="4" fill="#10b981" fillOpacity="0.1"/>
-        <circle cx="36" cy="100" r="3" fill="#10b981"/>
-        <rect x="44" y="97" width="20" height="6" rx="2" fill="#10b981" fillOpacity="0.3"/>
-        <rect x="76" y="94" width="40" height="12" rx="4" fill="#ef4444" fillOpacity="0.1"/>
-        <circle cx="82" cy="100" r="3" fill="#ef4444"/>
-        <rect x="90" y="97" width="20" height="6" rx="2" fill="#ef4444" fillOpacity="0.3"/>
-        {/* Floating bar chart card */}
-        <g style={{ animation: `lgFloat 3.8s ease-in-out infinite ${floatDelay}` }}>
-          <rect x="26" y="120" width="163" height="75" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
-          <rect x="38" y="130" width="45" height="6" rx="3" fill="#e4e4e7"/>
-          <line x1="38" y1="178" x2="177" y2="178" stroke="#e4e4e7" strokeWidth="1.5"/>
-          <rect x="44" y="152" width="12" height="26" rx="1.5" fill="#0070D2"/>
-          <rect x="62" y="142" width="12" height="36" rx="1.5" fill="#3b82f6"/>
-          <rect x="80" y="136" width="12" height="42" rx="1.5" fill="#C89B3C"/>
-          <rect x="98" y="148" width="12" height="30" rx="1.5" fill="#ef4444"/>
-          <rect x="116" y="140" width="12" height="38" rx="1.5" fill="#10b981"/>
-          <rect x="134" y="154" width="12" height="24" rx="1.5" fill="#a855f7"/>
-          <rect x="152" y="146" width="12" height="32" rx="1.5" fill="#e2e8f0"/>
-        </g>
-        {/* Floating line chart card */}
-        <g style={{ animation: `lgFloat 4.2s ease-in-out infinite 0.4s` }}>
-          <rect x="26" y="208" width="163" height="70" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
-          <path d="M42,262 Q72,224 102,250 T162,228" stroke="#0070D2" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-          <circle cx="42" cy="262" r="3" fill="#0070D2"/>
-          <circle cx="102" cy="250" r="3" fill="#C89B3C"/>
-          <circle cx="162" cy="228" r="3" fill="#10b981"/>
-          <circle cx="102" cy="250" r="10" fill="#C89B3C" fillOpacity="0.08" stroke="#C89B3C" strokeWidth="1" strokeDasharray="2 2"/>
-        </g>
-      </svg>
-    )
-  }
-
-  // Left illustration: Natural Language Query Interface
+function ClavisMark({ size = 42, variant = 'light' }) {
+  // CLAVIS key logo. variant 'light' = solid navy; 'panel' = outlined for dark backgrounds.
+  const w = size
+  const h = Math.round(size * (54 / 58))
   return (
-    <svg width="215" height="335" viewBox="0 0 215 335" fill="none">
-      {/* Card backdrop */}
-      <rect x="15" y="45" width="185" height="245" rx="16" fill="white" stroke="#DDD5C3" strokeWidth="1.5"/>
-      {/* Header */}
-      <rect x="30" y="62" width="50" height="8" rx="4" fill="#C89B3C" fillOpacity="0.35"/>
-      <rect x="30" y="78" width="110" height="6" rx="3" fill="#f4f4f5"/>
-      {/* Online status */}
-      <circle cx="36" cy="97" r="3.5" fill="#10b981"/>
-      <rect x="44" y="94" width="50" height="6" rx="3" fill="#f4f4f5"/>
-
-      {/* Floating user query bubble */}
-      <g style={{ animation: `lgFloat 3.8s ease-in-out infinite ${floatDelay}` }}>
-        <rect x="26" y="112" width="163" height="62" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
-        {/* User avatar */}
-        <circle cx="44" cy="132" r="9" fill="#1B3254"/>
-        <rect x="39" y="129" width="10" height="6" rx="2" fill="white" fillOpacity="0.7"/>
-        {/* Query text lines */}
-        <rect x="60" y="126" width="115" height="6" rx="3" fill="#e4e4e7"/>
-        <rect x="60" y="137" width="88" height="6" rx="3" fill="#e4e4e7"/>
-        {/* Send arrow badge */}
-        <rect x="155" y="148" width="22" height="16" rx="6" fill="#C89B3C"/>
-        <path d="M162,156 L170,156 M167,153 L170,156 L167,159" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </g>
-
-      {/* Floating AI response card */}
-      <g style={{ animation: `lgFloat 4.3s ease-in-out infinite 0.5s` }}>
-        <rect x="26" y="188" width="163" height="90" rx="8" fill="white" stroke="#EAE2D4" strokeWidth="1.5" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.03))' }}/>
-        {/* AI label */}
-        <rect x="38" y="200" width="28" height="10" rx="4" fill="#1B3254" fillOpacity="0.9"/>
-        <rect x="44" y="203" width="16" height="4" rx="1.5" fill="white" fillOpacity="0.7"/>
-        {/* Result rows */}
-        <rect x="38" y="218" width="130" height="5" rx="2" fill="#f4f4f5"/>
-        <rect x="38" y="228" width="108" height="5" rx="2" fill="#f4f4f5"/>
-        <rect x="38" y="238" width="120" height="5" rx="2" fill="#f4f4f5"/>
-        <rect x="38" y="248" width="95" height="5" rx="2" fill="#f4f4f5"/>
-        {/* Status chips */}
-        <rect x="38" y="260" width="36" height="11" rx="4" fill="#10b981" fillOpacity="0.12"/>
-        <circle cx="45" cy="265.5" r="2.5" fill="#10b981"/>
-        <rect x="50" y="263" width="18" height="5" rx="1.5" fill="#10b981" fillOpacity="0.4"/>
-        <rect x="80" y="260" width="36" height="11" rx="4" fill="#C89B3C" fillOpacity="0.12"/>
-        <circle cx="87" cy="265.5" r="2.5" fill="#C89B3C"/>
-        <rect x="92" y="263" width="18" height="5" rx="1.5" fill="#C89B3C" fillOpacity="0.4"/>
-      </g>
+    <svg width={w} height={h} viewBox="0 0 58 54" fill="none">
+      <polygon points="29,2 52,15 52,39 29,52 6,39 6,15"
+        fill={variant === 'panel' ? '#24426e' : '#1B3254'}
+        stroke={variant === 'panel' ? '#C89B3C' : 'none'} strokeWidth={variant === 'panel' ? 1.2 : 0}/>
+      <circle cx="22" cy="27" r="9" fill="#C89B3C"/>
+      <circle cx="22" cy="27" r="4" fill="#1B3254"/>
+      <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
+      <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
+      <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
     </svg>
   )
 }
 
-function LoginScreen({ onLogin }) {
+const LG_DEMO_ACCOUNTS = [
+  ['admin', 'SapAdmin@2026!'],
+  ['fi_user', 'Finance@123'],
+  ['hr_user', 'HR@123'],
+  ['demo', 'demo'],
+]
+
+// Builds a CSS box-shadow string of randomly-placed stars across a 2000x2000 field.
+// Paired with a ::after duplicate offset 2000px down so the upward drift loops seamlessly.
+function lgStarShadows(count, color) {
+  const out = []
+  for (let i = 0; i < count; i++) {
+    out.push(`${Math.floor(Math.random() * 2000)}px ${Math.floor(Math.random() * 2000)}px ${color}`)
+  }
+  return out.join(',')
+}
+
+function LoginScreen({ onLogin, theme = 'light' }) {
+  const isDark = theme === 'dark'
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPw, setShowPw] = useState(false)
+
+  // Backdrop starfields — dense galaxy in dark mode, sparse constellation in light mode.
+  const starsFaint = useMemo(() => lgStarShadows(700, 'rgba(255,255,255,.85)'), [])
+  const starsMid = useMemo(() => lgStarShadows(220, 'rgba(207,227,255,.95)'), [])
+  const starsGold = useMemo(() => lgStarShadows(70, 'rgba(230,200,126,.95)'), [])
+  const starsGoldLight = useMemo(() => lgStarShadows(140, 'rgba(200,155,60,.55)'), [])
+  const starsNavyLight = useMemo(() => lgStarShadows(90, 'rgba(27,50,84,.35)'), [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -2108,113 +2060,235 @@ function LoginScreen({ onLogin }) {
   return (
     <>
       <style>{`
-        @keyframes lgFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-        @keyframes lgFadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
-        .lg-page{min-height:100vh;background:#EDE8DC;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
-        .lg-layout{display:flex;align-items:center;justify-content:center;width:100%;max-width:940px;padding:40px 16px;box-sizing:border-box}
-        .lg-char{flex:0 0 215px;display:flex;justify-content:center;align-items:center}
-        .lg-char-r{transform:scaleX(-1)}
-        .lg-card{flex:0 1 430px;background:white;border-radius:22px;padding:46px 48px;box-shadow:0 16px 64px rgba(0,0,0,0.08),0 2px 8px rgba(0,0,0,0.04);animation:lgFadeUp 0.65s ease forwards;position:relative;z-index:1;box-sizing:border-box}
-        .lg-logo-wrap{display:flex;justify-content:center;margin-bottom:18px}
-        .lg-title{margin:0;font-size:28px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px;font-family:var(--font-sans);text-align:center}
-        .lg-sub{margin:8px 0 0;font-size:10px;color:#AEAEAE;letter-spacing:3px;text-transform:uppercase;font-family:var(--font-sans);text-align:center}
-        .lg-form{display:flex;flex-direction:column;gap:14px;margin-top:32px}
-        .lg-input{width:100%;border:1.5px solid #EAE2D4;border-radius:10px;padding:14px 16px;font-size:14px;outline:none;background:#FDFCFA;color:#2d2d2d;box-sizing:border-box;transition:border-color 0.2s,box-shadow 0.2s;font-family:var(--font-sans)}
-        .lg-input:focus{border-color:#1a1a1a;box-shadow:0 0 0 3px rgba(26,26,26,0.06);background:white}
-        .lg-input::placeholder{color:#C0B5A2;font-style:italic;font-size:13.5px}
-        .lg-pw-wrap{position:relative}
-        .lg-pw-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#999;font-size:12px;font-family:var(--font-sans);padding:2px 4px;letter-spacing:0.5px;line-height:1}
-        .lg-pw-toggle:hover{color:#333}
-        .lg-btn{width:100%;background:#1a1a1a;color:white;border:none;border-radius:11px;padding:16px;font-size:15px;font-weight:600;cursor:pointer;margin-top:4px;letter-spacing:0.3px;transition:background 0.2s,transform 0.1s;font-family:var(--font-sans)}
-        .lg-btn:hover:not(:disabled){background:#2c2c2c}
-        .lg-btn:active:not(:disabled){transform:scale(0.99)}
-        .lg-btn:disabled{opacity:0.42;cursor:not-allowed}
-        .lg-error{color:#dc2626;font-size:12.5px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-family:var(--font-sans)}
-        .lg-demo{margin-top:26px;text-align:center}
-        .lg-demo-label{font-size:11px;color:#C8BFAF;font-family:var(--font-sans);margin:0 0 10px}
-        .lg-demo-row{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
-        .lg-demo-chip{background:#F5F0E8;border:1px solid #E0D5C5;border-radius:7px;padding:5px 13px;font-size:11px;color:#888;font-family:var(--font-mono);cursor:pointer;transition:background 0.15s,color 0.15s}
-        .lg-demo-chip:hover{background:#EDE0CC;color:#333}
-        .lg-footer{position:fixed;bottom:18px;left:0;right:0;text-align:center;font-size:11px;color:#C8BFAF;font-family:var(--font-sans);letter-spacing:0.5px}
-        @media(max-width:780px){.lg-char{display:none}.lg-card{padding:36px 28px}}
+        @keyframes lgRise{from{opacity:0;transform:translateY(26px) scale(.985)}to{opacity:1;transform:none}}
+        @keyframes lgFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+        @keyframes lgFloatY{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(-26px);opacity:.9}}
+        @keyframes lgGlow{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.12)}}
+        @keyframes lgSpin{to{transform:rotate(360deg)}}
+        @keyframes lgStarDrift{from{transform:translateY(0)}to{transform:translateY(-2000px)}}
+        @keyframes lgTwinkle{0%,100%{opacity:.45}50%{opacity:1}}
+        @keyframes lgTwinkleSoft{0%,100%{opacity:.3}50%{opacity:.85}}
+        @keyframes lgMwPulse{0%,100%{opacity:.7}50%{opacity:.95}}
+        @keyframes lgDrift1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,40px)}}
+        @keyframes lgDrift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,-30px)}}
+        @keyframes lgShoot{0%{opacity:0;transform:translate(0,0) rotate(22deg)}4%{opacity:1}16%{opacity:0;transform:translate(420px,170px) rotate(22deg)}100%{opacity:0;transform:translate(420px,170px) rotate(22deg)}}
+
+        .lg-root{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
+        /* theme tokens */
+        .lg-root.lg-dark{background:#081320;color:#eef2f8;
+          --lg-ink:#eef2f8;--lg-ink2:#9fb0c8;--lg-line:rgba(255,255,255,.12);
+          --lg-card-bg:linear-gradient(165deg, rgba(28,46,78,.72), rgba(12,26,48,.66));
+          --lg-card-border:rgba(255,255,255,.12);
+          --lg-card-shadow:0 40px 90px -30px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.08);
+          --lg-logo-shadow:drop-shadow(0 10px 22px rgba(0,0,0,.5));
+          --lg-wm-accent:#C89B3C;
+          --lg-input-bg:rgba(255,255,255,.05);--lg-input-ph:#73849c;
+          --lg-input-fborder:#C89B3C;--lg-input-fbg:rgba(255,255,255,.08);--lg-input-fring:rgba(200,155,60,.14);
+          --lg-toggle-hover:#e6c87e;--lg-toggle-hover-bg:rgba(255,255,255,.06);
+          --lg-link:#e6c87e;--lg-accent:#C89B3C;
+          --lg-btn-bg:linear-gradient(180deg,#d6a945,#C89B3C);--lg-btn-color:#1a1300;--lg-btn-shadow:0 12px 28px -10px rgba(200,155,60,.7);
+          --lg-spin-track:rgba(26,19,0,.3);--lg-spin-head:#1a1300;
+          --lg-chip-bg:rgba(255,255,255,.05);--lg-chip-hover-color:#e6c87e;--lg-chip-hover-border:#C89B3C;--lg-chip-hover-bg:rgba(200,155,60,.08);
+          --lg-error-bg:rgba(220,38,38,.14);--lg-error-border:rgba(248,113,113,.4);--lg-error-color:#ffb4b4;
+          --lg-foot:#5b6c84}
+        .lg-root.lg-light{background:#F6F1FA;color:#1a2233;
+          --lg-ink:#1a2233;--lg-ink2:#5d6678;--lg-line:rgba(27,50,84,.12);
+          --lg-card-bg:rgba(255,255,255,.72);
+          --lg-card-border:rgba(255,255,255,.85);
+          --lg-card-shadow:0 40px 90px -34px rgba(27,50,84,.32), 0 2px 10px rgba(27,50,84,.06), inset 0 1px 0 rgba(255,255,255,.9);
+          --lg-logo-shadow:drop-shadow(0 8px 18px rgba(27,50,84,.22));
+          --lg-wm-accent:#a87f28;
+          --lg-input-bg:rgba(255,255,255,.85);--lg-input-ph:#9aa2b2;
+          --lg-input-fborder:#1B3254;--lg-input-fbg:#fff;--lg-input-fring:rgba(27,50,84,.1);
+          --lg-toggle-hover:#1B3254;--lg-toggle-hover-bg:rgba(27,50,84,.06);
+          --lg-link:#1B3254;--lg-accent:#1B3254;
+          --lg-btn-bg:#1B3254;--lg-btn-color:#fff;--lg-btn-shadow:0 12px 26px -10px rgba(27,50,84,.5);
+          --lg-spin-track:rgba(255,255,255,.35);--lg-spin-head:#fff;
+          --lg-chip-bg:rgba(255,255,255,.65);--lg-chip-hover-color:#1B3254;--lg-chip-hover-border:#1B3254;--lg-chip-hover-bg:#fff;
+          --lg-error-bg:#fef2f2;--lg-error-border:#fecaca;--lg-error-color:#dc2626;
+          --lg-foot:#97a0b2}
+
+        /* ----- atmospheric background (shared structure, themed colors) ----- */
+        .lg-bg{position:absolute;inset:0;overflow:hidden;z-index:0}
+        .lg-bg-base{position:absolute;inset:0}
+        .lg-dark .lg-bg-base{background:radial-gradient(70% 55% at 18% 22%, rgba(58,40,110,.55) 0%, transparent 60%),radial-gradient(60% 60% at 85% 78%, rgba(200,155,60,.14) 0%, transparent 60%),radial-gradient(55% 60% at 62% 30%, rgba(36,66,110,.6) 0%, transparent 65%),linear-gradient(160deg, #0a1124 0%, #05070f 60%, #03040a 100%)}
+        .lg-light .lg-bg-base{background:radial-gradient(60% 50% at 18% 18%, rgba(200,155,60,.18) 0%, transparent 58%),radial-gradient(55% 55% at 85% 22%, rgba(225,165,185,.20) 0%, transparent 60%),radial-gradient(60% 60% at 80% 85%, rgba(130,170,225,.22) 0%, transparent 62%),linear-gradient(155deg, #FCF8F0 0%, #F3ECFA 48%, #E9F1FC 100%)}
+        .lg-neb{position:absolute;border-radius:50%;filter:blur(78px);opacity:.5;pointer-events:none}
+        .lg-dark .lg-neb{mix-blend-mode:screen}
+        .lg-light .lg-neb{mix-blend-mode:normal;filter:blur(80px)}
+        .lg-neb.n1{width:560px;height:560px;top:-140px;left:-90px;animation:lgDrift1 18s ease-in-out infinite}
+        .lg-neb.n2{width:480px;height:480px;bottom:-150px;right:-70px;animation:lgDrift2 21s ease-in-out infinite}
+        .lg-neb.n3{width:420px;height:420px;top:38%;left:54%;animation:lgDrift1 24s ease-in-out infinite reverse}
+        .lg-neb.n4{width:360px;height:360px;top:8%;left:60%;animation:lgDrift2 26s ease-in-out infinite}
+        .lg-dark .lg-neb.n1{background:radial-gradient(circle,#5b3aa0,transparent 70%)}
+        .lg-dark .lg-neb.n2{background:radial-gradient(circle,#caa24a,transparent 70%);opacity:.28}
+        .lg-dark .lg-neb.n3{background:radial-gradient(circle,#1f74a8,transparent 70%);opacity:.34}
+        .lg-dark .lg-neb.n4{background:radial-gradient(circle,#a8437f,transparent 70%);opacity:.22}
+        .lg-light .lg-neb.n1{background:radial-gradient(circle,rgba(200,155,60,.55),transparent 70%);opacity:.55}
+        .lg-light .lg-neb.n2{background:radial-gradient(circle,rgba(130,170,225,.6),transparent 70%);opacity:.5}
+        .lg-light .lg-neb.n3{background:radial-gradient(circle,rgba(190,150,225,.5),transparent 70%);opacity:.42}
+        .lg-light .lg-neb.n4{background:radial-gradient(circle,rgba(228,150,175,.5),transparent 70%);opacity:.4}
+        .lg-mw{position:absolute;width:175%;height:355px;top:25%;left:-38%;transform:rotate(-18deg);filter:blur(44px);mix-blend-mode:screen;opacity:.85;pointer-events:none;animation:lgMwPulse 12s ease-in-out infinite}
+        .lg-dark .lg-mw{background:radial-gradient(ellipse at center, rgba(150,130,225,.20), rgba(120,150,225,.10) 42%, transparent 72%)}
+        .lg-light .lg-mw{opacity:.8;background:radial-gradient(ellipse at center, rgba(255,255,255,.7), rgba(210,200,240,.28) 42%, transparent 72%)}
+        .lg-stars{position:absolute;top:0;left:0;border-radius:50%;background:transparent;pointer-events:none}
+        .lg-stars.s1{width:1px;height:1px;animation:lgStarDrift 140s linear infinite, lgTwinkle 4s ease-in-out infinite}
+        .lg-stars.s2{width:2px;height:2px;animation:lgStarDrift 95s linear infinite, lgTwinkle 6s ease-in-out infinite .8s}
+        .lg-stars.s3{width:2px;height:2px;animation:lgStarDrift 60s linear infinite, lgTwinkle 5s ease-in-out infinite .4s}
+        .lg-light .lg-stars.s1{width:2px;height:2px;animation:lgStarDrift 130s linear infinite, lgTwinkleSoft 5s ease-in-out infinite}
+        .lg-light .lg-stars.s2{animation:lgStarDrift 80s linear infinite, lgTwinkleSoft 6s ease-in-out infinite .6s}
+        .lg-stars::after{content:" ";position:absolute;top:2000px;left:0;width:inherit;height:inherit;border-radius:50%;background:transparent;box-shadow:inherit}
+        .lg-shoot{position:absolute;width:130px;height:2px;border-radius:2px;opacity:0;pointer-events:none;
+          background:linear-gradient(90deg,#fff,rgba(255,255,255,0));filter:drop-shadow(0 0 6px rgba(255,255,255,.8))}
+        .lg-shoot.sh1{top:16%;left:8%;animation:lgShoot 8s ease-in infinite 2s}
+        .lg-shoot.sh2{top:40%;left:34%;animation:lgShoot 11s ease-in infinite 6s}
+        .lg-light .lg-shoot{display:none}
+        .lg-grid{position:absolute;inset:0;opacity:.55;background-size:54px 54px;-webkit-mask-image:radial-gradient(80% 80% at 50% 45%,#000 35%,transparent 85%);mask-image:radial-gradient(80% 80% at 50% 45%,#000 35%,transparent 85%)}
+        .lg-dark .lg-grid{background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px)}
+        .lg-light .lg-grid{background-image:linear-gradient(rgba(27,50,84,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(27,50,84,.05) 1px,transparent 1px)}
+        .lg-grain{position:absolute;inset:0;opacity:.05;pointer-events:none;
+          background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+        .lg-light .lg-grain{opacity:.035;mix-blend-mode:multiply}
+        .lg-pt{position:absolute;width:5px;height:5px;border-radius:50%;opacity:.5}
+        .lg-pt:nth-child(1){top:18%;left:24%;animation:lgFloatY 7s ease-in-out infinite}
+        .lg-pt:nth-child(2){top:70%;left:18%;animation:lgFloatY 9s ease-in-out infinite 1s}
+        .lg-pt:nth-child(3){top:30%;left:78%;animation:lgFloatY 8s ease-in-out infinite .5s}
+        .lg-pt:nth-child(4){top:82%;left:72%;animation:lgFloatY 10s ease-in-out infinite 1.4s}
+        .lg-pt:nth-child(5){top:12%;left:62%;animation:lgFloatY 6.5s ease-in-out infinite .8s}
+        .lg-dark .lg-pt{background:#e6c87e;box-shadow:0 0 8px #e6c87e}
+        .lg-dark .lg-pt:nth-child(2),.lg-dark .lg-pt:nth-child(4){background:#7fb6e0;box-shadow:0 0 8px #7fb6e0}
+        .lg-light .lg-pt{background:rgba(200,155,60,.55);box-shadow:0 0 10px rgba(200,155,60,.5)}
+        .lg-light .lg-pt:nth-child(2){background:rgba(130,170,225,.55);box-shadow:0 0 10px rgba(130,170,225,.55)}
+        .lg-light .lg-pt:nth-child(4){background:rgba(190,150,225,.55);box-shadow:0 0 10px rgba(190,150,225,.55)}
+
+        /* ----- card (themed via vars) ----- */
+        .lg-card{position:relative;z-index:2;width:430px;max-width:calc(100vw - 40px);
+          background:var(--lg-card-bg);
+          border:1px solid var(--lg-card-border);border-radius:24px;padding:44px 46px;color:var(--lg-ink);
+          -webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%);
+          box-shadow:var(--lg-card-shadow);
+          animation:lgRise .8s cubic-bezier(.2,.7,.2,1) both}
+        .lg-card::before{content:"";position:absolute;top:-1px;left:34px;right:34px;height:1px;background:linear-gradient(90deg,transparent,#C89B3C,transparent);opacity:.75}
+        .lg-logo-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:26px}
+        .lg-halo-mark{position:relative;width:62px;height:58px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+        .lg-halo2{position:absolute;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(200,155,60,.32),transparent 65%);animation:lgGlow 4.5s ease-in-out infinite}
+        .lg-halo-mark svg{position:relative;z-index:2;animation:lgFloat 5s ease-in-out infinite;filter:var(--lg-logo-shadow)}
+        .lg-wordmark{font-family:var(--font-display);font-size:25px;font-weight:600;letter-spacing:.3px;color:var(--lg-ink)}
+        .lg-wordmark b{color:var(--lg-wm-accent);font-weight:600}
+        .lg-tagline{font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--lg-ink2);margin-top:7px}
+
+        .lg-form2{display:flex;flex-direction:column;gap:15px;margin-top:6px}
+        .lg-field2{position:relative}
+        .lg-lbl{display:block;font-size:11.5px;font-weight:600;color:var(--lg-ink2);margin-bottom:7px;letter-spacing:.04em;text-transform:uppercase;font-family:var(--font-sans)}
+        .lg-inp{width:100%;height:50px;border:1px solid var(--lg-line);border-radius:12px;padding:0 16px;font-size:14px;font-family:var(--font-sans);color:var(--lg-ink);background:var(--lg-input-bg);outline:none;transition:border-color .2s,box-shadow .2s,background .2s}
+        .lg-inp::placeholder{color:var(--lg-input-ph)}
+        .lg-inp:focus{border-color:var(--lg-input-fborder);background:var(--lg-input-fbg);box-shadow:0 0 0 4px var(--lg-input-fring)}
+        .lg-pw-toggle2{position:absolute;right:6px;top:30px;height:40px;padding:0 12px;border:none;background:none;color:var(--lg-ink2);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;font-family:var(--font-sans)}
+        .lg-pw-toggle2:hover{color:var(--lg-toggle-hover);background:var(--lg-toggle-hover-bg)}
+        .lg-row2{display:flex;align-items:center;justify-content:space-between;margin-top:-3px}
+        .lg-remember2{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--lg-ink2);cursor:pointer;font-family:var(--font-sans)}
+        .lg-remember2 input{accent-color:var(--lg-accent);width:15px;height:15px}
+        .lg-link2{font-size:12.5px;font-weight:600;color:var(--lg-link);text-decoration:none;background:none;border:none;cursor:pointer;font-family:var(--font-sans);padding:0}
+        .lg-link2:hover{text-decoration:underline}
+        .lg-btn2{height:52px;margin-top:6px;border:none;border-radius:12px;cursor:pointer;background:var(--lg-btn-bg);color:var(--lg-btn-color);font-family:var(--font-sans);font-size:14.5px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:var(--lg-btn-shadow);transition:transform .12s,box-shadow .2s,filter .2s,background .2s}
+        .lg-dark .lg-btn2:hover:not(:disabled){filter:brightness(1.06);box-shadow:0 16px 34px -10px rgba(200,155,60,.8)}
+        .lg-light .lg-btn2:hover:not(:disabled){background:#16294a;box-shadow:0 16px 32px -10px rgba(27,50,84,.55)}
+        .lg-btn2:active:not(:disabled){transform:translateY(1px)}
+        .lg-btn2:disabled{opacity:.55;cursor:not-allowed}
+        .lg-spin2{width:15px;height:15px;border:2px solid var(--lg-spin-track);border-top-color:var(--lg-spin-head);border-radius:50%;animation:lgSpin .7s linear infinite}
+        .lg-error{font-size:12.5px;color:var(--lg-error-color);background:var(--lg-error-bg);border:1px solid var(--lg-error-border);border-radius:10px;padding:10px 14px;font-family:var(--font-sans)}
+        .lg-demo2{margin-top:26px;border-top:1px solid var(--lg-line);padding-top:16px}
+        .lg-demo-label2{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--lg-ink2);margin-bottom:10px;font-family:var(--font-sans)}
+        .lg-demo-row{display:flex;flex-wrap:wrap;gap:7px}
+        .lg-chip2{font-family:var(--font-mono);font-size:11px;color:var(--lg-ink2);background:var(--lg-chip-bg);border:1px solid var(--lg-line);border-radius:8px;padding:5px 11px;cursor:pointer;transition:all .15s}
+        .lg-chip2:hover{color:var(--lg-chip-hover-color);border-color:var(--lg-chip-hover-border);background:var(--lg-chip-hover-bg)}
+        .lg-foot2{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:11px;color:var(--lg-foot);letter-spacing:.04em;z-index:2;font-family:var(--font-sans)}
+
+        @media(max-width:480px){.lg-card{padding:36px 26px}}
       `}</style>
 
-      <div className="lg-page">
-        <div className="lg-layout">
+      <div className={`lg-root ${isDark ? 'lg-dark' : 'lg-light'}`}>
+        {/* themed backdrop: galaxy (dark) / luminous sky (light) */}
+        <div className="lg-bg">
+          <div className="lg-bg-base" />
+          <div className="lg-mw" />
+          <div className="lg-neb n1" /><div className="lg-neb n2" /><div className="lg-neb n3" /><div className="lg-neb n4" />
+          <div className="lg-stars s1" style={{ boxShadow: isDark ? starsFaint : starsGoldLight }} />
+          <div className="lg-stars s2" style={{ boxShadow: isDark ? starsMid : starsNavyLight }} />
+          {isDark && <div className="lg-stars s3" style={{ boxShadow: starsGold }} />}
+          <div className="lg-shoot sh1" /><div className="lg-shoot sh2" />
+          <div className="lg-grid" />
+          <span className="lg-pt" /><span className="lg-pt" /><span className="lg-pt" /><span className="lg-pt" /><span className="lg-pt" />
+          <div className="lg-grain" />
+        </div>
 
-          {/* Left illustration: Cognitive ERP Data Streams */}
-          <div className="lg-char">
-            <LoginCharSvg type="left" floatDelay="0s" />
+        {/* glass login card */}
+        <main className="lg-card">
+          <div className="lg-logo-wrap">
+            <div className="lg-halo-mark">
+              <div className="lg-halo2" />
+              <ClavisMark size={56} variant={isDark ? 'panel' : 'light'} />
+            </div>
+            <div className="lg-wordmark">KUTTY <b>AI</b></div>
+            <div className="lg-tagline">Enterprise AI Assistant</div>
           </div>
 
-          {/* Login card */}
-          <div className="lg-card">
-            {/* CLAVIS key logo */}
-            <div className="lg-logo-wrap">
-              <svg width="58" height="54" viewBox="0 0 58 54" fill="none">
-                <polygon points="29,2 52,15 52,39 29,52 6,39 6,15" fill="#1B3254"/>
-                <circle cx="22" cy="27" r="9" fill="#C89B3C"/>
-                <circle cx="22" cy="27" r="4" fill="#1B3254"/>
-                <rect x="31" y="24.5" width="17" height="5" rx="2.5" fill="#C89B3C"/>
-                <rect x="43" y="29.5" width="4.5" height="7" rx="2" fill="#C89B3C"/>
-                <rect x="36.5" y="29.5" width="4" height="9" rx="2" fill="#C89B3C"/>
-              </svg>
-            </div>
-
-            <h1 className="lg-title">CLAVIS <span style={{ color: '#C89B3C' }}>ERP</span></h1>
-            <p className="lg-sub">Enterprise ERP Intelligence</p>
-
-            <form className="lg-form" onSubmit={handleSubmit}>
+          <form className="lg-form2" onSubmit={handleSubmit}>
+            <div className="lg-field2">
+              <label className="lg-lbl" htmlFor="lg-userid">User ID</label>
               <input
-                className="lg-input"
+                id="lg-userid"
+                className="lg-inp"
                 value={userId}
                 onChange={e => setUserId(e.target.value)}
-                placeholder="Enter User ID"
+                placeholder="Enter your user ID"
                 autoFocus
                 autoComplete="username"
               />
-              <div className="lg-pw-wrap">
-                <input
-                  className="lg-input"
-                  type={showPw ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Password"
-                  autoComplete="current-password"
-                  style={{ paddingRight: 58 }}
-                />
-                <button type="button" className="lg-pw-toggle" onClick={() => setShowPw(p => !p)}>
-                  {showPw ? 'Hide' : 'Show'}
-                </button>
-              </div>
-
-              {error && <div className="lg-error">{error}</div>}
-
-              <button className="lg-btn" type="submit" disabled={!userId || !password || loading}>
-                {loading ? 'Signing in…' : 'Sign In'}
+            </div>
+            <div className="lg-field2">
+              <label className="lg-lbl" htmlFor="lg-password">Password</label>
+              <input
+                id="lg-password"
+                className="lg-inp"
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                style={{ paddingRight: 70 }}
+              />
+              <button type="button" className="lg-pw-toggle2" onClick={() => setShowPw(p => !p)}>
+                {showPw ? 'Hide' : 'Show'}
               </button>
-            </form>
+            </div>
 
-            <div className="lg-demo">
-              <p className="lg-demo-label">Quick demo access</p>
-              <div className="lg-demo-row">
-                {[['admin', 'SapAdmin@2026!'], ['fi_user', 'Finance@123'], ['hr_user', 'HR@123'], ['demo', 'demo']].map(([u, p]) => (
-                  <button key={u} className="lg-demo-chip" type="button" onClick={() => { setUserId(u); setPassword(p) }}>
-                    {u}
-                  </button>
-                ))}
-              </div>
+            <div className="lg-row2">
+              <label className="lg-remember2"><input type="checkbox" /> Remember me</label>
+              <button type="button" className="lg-link2">Need help?</button>
+            </div>
+
+            {error && <div className="lg-error">{error}</div>}
+
+            <button className="lg-btn2" type="submit" disabled={!userId || !password || loading}>
+              {loading && <span className="lg-spin2" />}
+              {loading ? 'Verifying…' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="lg-demo2">
+            <div className="lg-demo-label2">Demo accounts</div>
+            <div className="lg-demo-row">
+              {LG_DEMO_ACCOUNTS.map(([u, p]) => (
+                <button key={u} className="lg-chip2" type="button" onClick={() => { setUserId(u); setPassword(p) }}>
+                  {u}
+                </button>
+              ))}
             </div>
           </div>
+        </main>
 
-          {/* Right illustration: Analytics Insight Dashboard */}
-          <div className="lg-char">
-            <LoginCharSvg type="right" floatDelay="0.8s" />
-          </div>
-
-        </div>
-
-        <div className="lg-footer">Copyright © CLAVIS 2026 &nbsp;·&nbsp; Enterprise ERP Intelligence</div>
+        <div className="lg-foot2">© KUTTY 2026 · Secure access via CLAVIS</div>
       </div>
     </>
   )
@@ -2299,7 +2373,7 @@ function Sidebar({ onReset, sapMode,
           </button>
         </div>
         
-        <div className="sidebar-collapsed-logo" title="CLAVIS">
+        <div className="sidebar-collapsed-logo" title="Kutty">
           <svg width="22" height="20" viewBox="0 0 22 20" fill="none">
             <circle cx="7" cy="10" r="5.5" fill="#C89B3C"/>
             <circle cx="7" cy="10" r="2.2" fill="#1a1a2e"/>
@@ -2485,15 +2559,22 @@ function getModelIcon(modelName) {
 }
 
 export default function App() {
-  const [messages, setMessages] = useState([])
   const {
     isRunning,
     streamingAnswer,
     currentPhase,
+    statusSteps,
     streamError,
+    chatVisible,
+    dataPanel,
+    messages,
   } = useChatStore()
+  const setMessages = (msgs) => {
+    const store = useChatStore.getState()
+    store.setMessages(typeof msgs === 'function' ? msgs(store.messages) : msgs)
+  }
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('llama3.2')
+  const [model, setModel] = useState('kutty')
   const [ollamaStatus, setOllamaStatus] = useState('checking')
   const [sapMode, setSapMode] = useState('mock')
   const [showSettings, setShowSettings] = useState(false)
@@ -2662,6 +2743,7 @@ export default function App() {
       setMessages(msgs)
       setSessionId(sid)
       setViewMode('conversation')
+      setSidebarCollapsed(true)
       window.location.hash = `#/chat/${encodeURIComponent(sid)}`
       if (currentUser?.user_id) localStorage.setItem(`sap_session_${currentUser.user_id}`, sid)
     } catch { }
@@ -2715,6 +2797,7 @@ export default function App() {
   const sendResearch = useCallback(async (text) => {
     const msg = text.trim(); if (!msg || isRunning) return
     setViewMode('conversation')
+    setSidebarCollapsed(true)
     setMessages(p => [...p, { role: 'user', content: msg, userInitial }])
     setInput('')
     useChatStore.getState().setIsRunning(true)
@@ -2729,7 +2812,7 @@ export default function App() {
         research_result: { formatted_report: data.report, anomalies: data.anomalies || [], tools_run: data.tools_used || [], sources_used: data.sap_sources || [], entity_type: data.entity_type, entity_id: data.entity_id },
         request_id: data.request_id,
       }])
-    } catch { setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the CLAVIS API.' }]) }
+    } catch { setMessages(p => [...p, { role: 'bot', content: 'Error: Cannot reach the Kutty API.' }]) }
     finally { useChatStore.getState().setIsRunning(false); setTimeout(() => inputRef.current?.focus(), 50) }
   }, [isRunning, handleLogout, userInitial])
 
@@ -2739,6 +2822,7 @@ export default function App() {
     if (!msg || isRunning) return
 
     setViewMode('conversation')
+    setSidebarCollapsed(true)
     setInput('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
 
@@ -2757,7 +2841,7 @@ export default function App() {
 
     loadConversations()
     setTimeout(() => inputRef.current?.focus(), 50)
-  }, [isRunning, researchMode, sendResearch, handleLogout, sessionId, loadConversations])
+  }, [isRunning, researchMode, sendResearch, handleLogout, sessionId, loadConversations, model, userInitial])
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }
   const handleReset = async () => {
@@ -2769,30 +2853,32 @@ export default function App() {
   const primaryRole = currentUser?.roles?.[0]
   const statusLabel = { checking: 'Checking…', connected: 'LLM Online', disconnected: 'LLM Offline' }[ollamaStatus]
 
-  if (needsLogin) return <LoginScreen onLogin={handleLogin} />
+  if (needsLogin) return <LoginScreen onLogin={handleLogin} theme={theme} />
 
   return (
     <div className="app-shell">
       {showSettings && <SettingsModal onClose={handleSettingsClose} currentUser={currentUser} />}
 
-      <Sidebar
-        onReset={handleReset}
-        sapMode={sapMode}
-        conversations={conversations}
-        sessionId={viewMode === 'conversation' ? sessionId : null}
-        onNewChat={handleNewChat}
-        onLoadConversation={handleLoadConversation}
-        onDeleteConversation={handleDeleteConversation}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchRef={sidebarSearchRef}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
+      {(chatVisible || !dataPanel) && (
+        <Sidebar
+          onReset={handleReset}
+          sapMode={sapMode}
+          conversations={conversations}
+          sessionId={viewMode === 'conversation' ? sessionId : null}
+          onNewChat={handleNewChat}
+          onLoadConversation={handleLoadConversation}
+          onDeleteConversation={handleDeleteConversation}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchRef={sidebarSearchRef}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+      )}
 
-      <div className="main-content-layout">
+      <div className="main-content-layout" style={(!chatVisible && dataPanel) ? { display: 'none' } : {}}>
         {devSecretWarn && <DevWarningBanner />}
 
         {/* Topbar */}
@@ -2807,9 +2893,9 @@ export default function App() {
                 <rect x="14.5" y="11.5" width="2.2" height="5" rx="1" fill="#C89B3C"/>
               </svg>
             </div>
-            <span className="topbar-name">CLAVIS</span>
+            <span className="topbar-name">KUTTY</span>
             <span className="topbar-sep" />
-            <span className="topbar-subtitle">Enterprise ERP Intelligence</span>
+            <span className="topbar-subtitle">Enterprise AI Assistant</span>
           </div>
           <div className="topbar-right">
             <div className="status-pill">
@@ -2866,7 +2952,7 @@ export default function App() {
                 {/* Explore Section */}
                 <div className="google-explore-section">
                   <div className="google-explore-header">
-                    <h2 className="google-explore-title">Explore Clavis agents</h2>
+                    <h2 className="google-explore-title">Explore Kutty agents</h2>
                   </div>
 
                   <div className="google-cards-grid">
@@ -2984,7 +3070,8 @@ export default function App() {
                   key="streaming"
                   msg={{
                     content: streamingAnswer,
-                    status_steps: currentPhase ? [currentPhase] : [],
+                    status_steps: statusSteps,
+                    currentPhase: currentPhase,
                   }}
                   Plan={Plan}
                 />
@@ -3009,7 +3096,7 @@ export default function App() {
                   value={input}
                   placeholder={researchMode
                     ? 'Research any SAP entity — e.g. "research vendor V001" or "deep dive on MAT002"'
-                    : 'Ask anything about SAP… (Enter to send, Shift+Enter for newline)'
+                    : 'Ask Kutty about SAP or your ticket backlog… (Enter to send, Shift+Enter for newline)'
                   }
                   onChange={e => {
                     setInput(e.target.value)
@@ -3140,7 +3227,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="input-footer">CLAVIS can make mistakes. Verify important results.</div>
+            <div className="input-footer">Kutty can make mistakes. Verify important results.</div>
           </div>
         </div>
       </div>
