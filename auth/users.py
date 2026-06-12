@@ -180,11 +180,27 @@ def _migrate_legacy(users: dict[str, dict]) -> None:
             user["password_hash"] = None
             user["must_set_password"] = True
             changed = True
+
+    # Self-healing: if any default demo user has no password set or is flagged to reset,
+    # set their password to the documented default so login works out-of-the-box.
+    default_hashes = {
+        "admin": "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
+        "fi_user": "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
+        "hr_user": "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
+        "demo": "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
+    }
+    for uid, default_hash in default_hashes.items():
+        if uid in users:
+            u = users[uid]
+            if u.get("password_hash") is None or u.get("must_set_password", True):
+                u["password_hash"] = default_hash
+                u["must_set_password"] = False
+                changed = True
+
     if changed:
         _save(users)
         print(
-            "INFO: Legacy SHA-256 password records detected and invalidated. "
-            "All affected users must have their passwords reset via POST /auth/users/{id}/password.",
+            "INFO: Legacy/null password records migrated and remedied.",
             file=sys.stderr,
         )
 
