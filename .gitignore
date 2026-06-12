@@ -16,6 +16,7 @@ env/
 # Sensitive files
 users.json
 config.json
+mcp_keys.json
 *.env
 .env
 .env.*
