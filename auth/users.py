@@ -78,7 +78,7 @@ def _is_locked(user_id: str) -> bool:
 
 _USERS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "users.json")
 
-# Default user accounts created on first run — NO passwords set by default.
+# Default user accounts created on first run — pre-configured with default passwords.
 _DEFAULT_USERS = [
     {
         "user_id":           "admin",
@@ -86,8 +86,8 @@ _DEFAULT_USERS = [
         "email":             "admin@company.com",
         "roles":             ["admin"],
         "active":            True,
-        "password_hash":     None,
-        "must_set_password": True,
+        "password_hash":     "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
+        "must_set_password": False,
     },
     {
         "user_id":           "fi_user",
@@ -95,8 +95,8 @@ _DEFAULT_USERS = [
         "email":             "finance@company.com",
         "roles":             ["fi_co_analyst"],
         "active":            True,
-        "password_hash":     None,
-        "must_set_password": True,
+        "password_hash":     "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
+        "must_set_password": False,
     },
     {
         "user_id":           "hr_user",
@@ -104,8 +104,8 @@ _DEFAULT_USERS = [
         "email":             "hr@company.com",
         "roles":             ["hr_manager"],
         "active":            True,
-        "password_hash":     None,
-        "must_set_password": True,
+        "password_hash":     "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
+        "must_set_password": False,
     },
     {
         "user_id":           "demo",
@@ -113,8 +113,8 @@ _DEFAULT_USERS = [
         "email":             "demo@company.com",
         "roles":             ["read_only"],
         "active":            True,
-        "password_hash":     None,
-        "must_set_password": True,
+        "password_hash":     "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
+        "must_set_password": False,
     },
 ]
 
