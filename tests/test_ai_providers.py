@@ -269,5 +269,96 @@ class TestOpenAICompatChat(unittest.TestCase):
             self.assertEqual(["cfg-model"], p.list_models())
 
 
+from ai.providers.anthropic_provider import AnthropicProvider
+from ai.providers.registry import UnsupportedProviderType, build_provider
+
+
+def anthropic_provider_at(url, **over):
+    base = dict(
+        id="p3", tenant_id="default", name="Fake Anthropic",
+        provider_type=ProviderType.ANTHROPIC, base_url=url, organization_id=None,
+        deployment_name=None, timeout_seconds=1, max_retries=0,
+        egress_class="external", sap_data_permitted=False, is_active=True,
+    )
+    base.update(over)
+    return ProviderConfig(**base)
+
+
+class TestAnthropicAdapter(unittest.TestCase):
+
+    def test_returns_content_and_usage(self):
+        with FakeProviderServer(mode="ok", reply_text="pong") as s:
+            resp = AnthropicProvider(anthropic_provider_at(s.base_url), api_key="sk-ant-x").chat(
+                a_model(), MESSAGES
+            )
+            self.assertEqual("pong", resp.content)
+            self.assertEqual(11, resp.usage.prompt_tokens)
+            self.assertEqual(7, resp.usage.completion_tokens)
+
+    def test_system_message_is_hoisted_out_of_the_message_list(self):
+        with FakeProviderServer(mode="ok") as s:
+            AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").chat(
+                a_model(),
+                [Message(role="system", content="be terse"), Message(role="user", content="hi")],
+            )
+            body = s.requests[0]
+            self.assertEqual("be terse", body["system"])
+            self.assertEqual([{"role": "user", "content": "hi"}], body["messages"])
+
+    def test_sends_x_api_key_header(self):
+        with FakeProviderServer(mode="ok") as s:
+            AnthropicProvider(anthropic_provider_at(s.base_url), api_key="sk-ant-explicit").chat(
+                a_model(), MESSAGES
+            )
+            self.assertEqual("sk-ant-explicit", s.headers_seen[0]["x-api-key"])
+
+    def test_401_maps_to_auth_failed(self):
+        with FakeProviderServer(mode="unauthorized") as s:
+            with self.assertRaises(AuthFailed):
+                AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").chat(
+                    a_model(), MESSAGES
+                )
+
+    def test_embed_raises_capability_unsupported(self):
+        """Anthropic has no embeddings API. The registry must not pretend otherwise."""
+        from ai.errors import CapabilityUnsupported
+        with FakeProviderServer(mode="ok") as s:
+            with self.assertRaises(CapabilityUnsupported):
+                AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").embed(
+                    a_model(), ["text"]
+                )
+
+    def test_list_models_returns_empty(self):
+        """No listing endpoint. Empty means 'cannot enumerate', not 'none exist'."""
+        with FakeProviderServer(mode="ok") as s:
+            self.assertEqual(
+                [], AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").list_models()
+            )
+
+
+class TestProviderRegistry(unittest.TestCase):
+
+    def test_builds_the_right_adapter_for_each_type(self):
+        cases = [
+            (ProviderType.OLLAMA, OllamaProvider),
+            (ProviderType.OPENAI, OpenAICompatProvider),
+            (ProviderType.AZURE_OPENAI, OpenAICompatProvider),
+            (ProviderType.CUSTOM, OpenAICompatProvider),
+            (ProviderType.ANTHROPIC, AnthropicProvider),
+        ]
+        for ptype, expected in cases:
+            with self.subTest(provider_type=ptype):
+                built = build_provider(provider_at("http://x", provider_type=ptype), api_key="k")
+                self.assertIsInstance(built, expected)
+
+    def test_passes_the_api_key_through(self):
+        built = build_provider(provider_at("http://x", provider_type=ProviderType.OPENAI), "sk-1")
+        self.assertEqual("sk-1", built.api_key)
+
+    def test_unknown_type_raises(self):
+        with self.assertRaises(UnsupportedProviderType):
+            build_provider(provider_at("http://x", provider_type="NOT_A_TYPE"), None)
+
+
 if __name__ == "__main__":
     unittest.main()
