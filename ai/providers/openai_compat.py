@@ -31,6 +31,12 @@ AZURE_API_VERSION = "2024-02-01"
 
 class OpenAICompatProvider(AIProvider):
 
+    #: Paths Azure namespaces under a deployment (inference calls). Its model
+    #: listing is account-scoped, not deployment-scoped, so /v1/models must
+    #: not be rewritten the same way or a configured Azure provider would
+    #: 404 on health_check()/list_models() and could never pass validation.
+    _AZURE_DEPLOYMENT_PATHS = ("/v1/chat/completions", "/v1/embeddings")
+
     # ── request construction ─────────────────────────────────────────────────
 
     @property
@@ -50,15 +56,20 @@ class OpenAICompatProvider(AIProvider):
 
     def _url(self, path: str) -> str:
         base = self.provider.base_url.rstrip("/")
-        if self._is_azure and self.provider.deployment_name:
-            # Azure namespaces by deployment and does not use the /v1 prefix:
+        if not (self._is_azure and self.provider.deployment_name):
+            return f"{base}{path}"
+        # Azure does not use the /v1 prefix on any of its paths.
+        suffix = path[len("/v1"):] if path.startswith("/v1") else path
+        if path in self._AZURE_DEPLOYMENT_PATHS:
+            # Inference calls are namespaced by deployment:
             #   {base}/openai/deployments/{deployment}/chat/completions
-            suffix = path[len("/v1"):] if path.startswith("/v1") else path
             return (
                 f"{base}/openai/deployments/{self.provider.deployment_name}"
                 f"{suffix}?api-version={AZURE_API_VERSION}"
             )
-        return f"{base}{path}"
+        # Control-plane paths (model listing) are account-scoped, not
+        # deployment-scoped: {base}/openai/models
+        return f"{base}/openai{suffix}?api-version={AZURE_API_VERSION}"
 
     def _fail(self, exc: Exception, model_identifier: str | None = None) -> NoReturn:
         ctx = {"provider_name": self.provider.name, "model_identifier": model_identifier}

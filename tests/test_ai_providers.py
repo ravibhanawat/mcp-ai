@@ -205,6 +205,23 @@ class TestOpenAICompatChat(unittest.TestCase):
             self.assertNotIn("/v1/chat/completions", path)
             self.assertIn("api-version=", path)
 
+    def test_azure_model_listing_is_account_scoped_not_deployment_scoped(self):
+        """Azure's model listing is not namespaced under a deployment. If
+        list_models()/health_check() requested a deployment-scoped URL, a
+        real Azure tenant would 404 here and the provider could never pass
+        the Task 15 activation gate."""
+        with FakeProviderServer(mode="ok", model_name="cfg-model") as s:
+            p = OpenAICompatProvider(
+                openai_provider_at(s.base_url, ProviderType.AZURE_OPENAI,
+                                   deployment_name="my-deployment"),
+                api_key="azure-key",
+            )
+            self.assertEqual(["cfg-model"], p.list_models())
+            path = s.paths_seen[0]
+            self.assertIn("/openai/models", path)
+            self.assertNotIn("/openai/deployments/", path)
+            self.assertIn("api-version=", path)
+
     def test_sends_organization_header_when_configured(self):
         with FakeProviderServer(mode="ok") as s:
             OpenAICompatProvider(
