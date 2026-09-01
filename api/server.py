@@ -173,6 +173,8 @@ async def lifespan(app: FastAPI):
     import asyncio as _aio
     try:
         await _aio.wait_for(_aio.to_thread(_run_migrations), timeout=5.0)
+        from ai.schema import run_ai_migrations as _run_ai_migrations
+        await _aio.wait_for(_aio.to_thread(_run_ai_migrations), timeout=5.0)
     except _aio.TimeoutError:
         _logger.warning("DB migration timed out at startup — DB may not be available.")
     # Open async PostgreSQL pool (used by streaming event_generator)
