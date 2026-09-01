@@ -16,3 +16,5 @@ litellm>=1.40.0
 tiktoken>=0.7.0
 # Caching / scale — chat + chart payload cache (graceful: optional at runtime)
 redis>=5.0.0
+# AI provider credential encryption at rest (core/crypto.py)
+cryptography>=42.0.0
