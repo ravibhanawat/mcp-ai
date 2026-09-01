@@ -78,6 +78,11 @@ class FallbackChain:
     ) -> tuple[Any, ResolvedModel, bool]:
         """Call `call` against primary then each candidate until one succeeds.
 
+        `on_attempt`, when given, is called exactly once per try — with the
+        exception on a failed attempt (retryable or not) and `None` on success.
+        That asymmetry is load-bearing: the caller writes one ai_usage_logs row
+        per call and derives its status from `error is None`.
+
         Returns (result, model_used, fallback_used). Raises the last retryable
         error when the chain is exhausted, or immediately re-raises any
         non-retryable error.

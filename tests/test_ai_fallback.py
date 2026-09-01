@@ -140,6 +140,27 @@ class TestExecution(FallbackTestCase):
         result, used, _ = self.chain.execute(self.primary, self._candidates(), call)
         self.assertEqual("third", used.model.id)
 
+    def test_an_unauthorized_candidate_is_never_invoked(self):
+        """The requirement is that no payload reaches an excluded model — not
+        merely that it is absent from the candidate list."""
+        self.store.set_tenant_model("default", "second", allowed=False)
+        invoked = []
+
+        def call(m):
+            invoked.append(m.model.id)
+            if m.model.id == "primary":
+                raise ProviderUnavailable("down")
+            return f"ok:{m.model.id}"
+
+        result, used, fell_back = self.chain.execute(
+            self.primary, self._candidates(), call
+        )
+        self.assertEqual("ok:third", result)
+        self.assertEqual("third", used.model.id)
+        self.assertTrue(fell_back)
+        self.assertNotIn("second", invoked)
+        self.assertEqual(["primary", "third"], invoked)
+
     def test_auth_failure_is_retryable(self):
         def call(m):
             if m.model.id == "primary":
