@@ -20,7 +20,7 @@ import time
 from typing import Any, AsyncIterator
 
 from ai import credentials
-from ai.errors import AIError
+from ai.errors import AIError, ModelNotAuthorized
 from ai.fallback import FallbackChain
 from ai.providers.registry import build_provider
 from ai.router import ModelRouter, Resolution
@@ -73,6 +73,22 @@ class AIProviderManager:
         prepared = sanitize_sap_payload(messages) if redact else messages
         return [Message(role=m["role"], content=m.get("content", "")) for m in prepared], redact
 
+    def _prepare_texts(self, resolved: ResolvedModel, texts: list[str],
+                        carries_sap_data: bool) -> tuple[list[str], bool]:
+        """The same egress decision as `_prepare`, adapted for embed()'s bare
+        strings rather than role/content messages.
+
+        Reuses `sanitize_sap_payload`'s "SAP tool '...' returned:" predicate by
+        round-tripping each text through the message shape it expects, instead
+        of re-implementing that check a second time with a risk of it drifting.
+        """
+        redact = self._should_redact(resolved, carries_sap_data)
+        if not redact:
+            return texts, False
+        wrapped = [{"role": "user", "content": t} for t in texts]
+        sanitized = sanitize_sap_payload(wrapped)
+        return [m["content"] for m in sanitized], True
+
     # ── dispatch ─────────────────────────────────────────────────────────────
 
     def chat(
@@ -83,14 +99,22 @@ class AIProviderManager:
         carries_sap_data: bool = False, local_only: bool = False,
         tools: list[dict[str, Any]] | None = None, request_id: str | None = None,
     ) -> ChatResponse:
-        resolution = self.resolve_only(
-            tenant_id=tenant_id, purpose=purpose, intent=intent,
-            requested_model_id=requested_model_id, required=required, local_only=local_only,
-        )
-        primary = resolution.resolved
-        candidates = self.chain.candidates(
-            tenant_id, purpose, primary, required, local_only
-        )
+        try:
+            resolution = self.resolve_only(
+                tenant_id=tenant_id, purpose=purpose, intent=intent,
+                requested_model_id=requested_model_id, required=required, local_only=local_only,
+            )
+            primary = resolution.resolved
+            candidates = self.chain.candidates(
+                tenant_id, purpose, primary, required, local_only
+            )
+        except AIError as exc:
+            # No model was ever resolved, so there is nothing to attribute a row
+            # to — but a misconfiguration that blocks every request must still
+            # leave a trace, or an administrator debugging "the assistant
+            # stopped answering" finds an empty usage table.
+            self._log_resolution_failure(tenant_id, user_id, purpose, intent, request_id, exc)
+            raise
 
         # ResolvedModel is frozen, so each attempt's redaction outcome is tracked
         # here and read back when the attempts are logged.
@@ -143,23 +167,63 @@ class AIProviderManager:
         model = resolution.resolved
         prepared, redacted = self._prepare(model, messages, carries_sap_data)
         api_key = self.credential_for(model, tenant_id)
-        log_usage(self._record(
-            tenant_id, user_id, model, purpose, intent, request_id,
-            latency_ms=None, redacted=redacted, status="ok",
-        ))
-        return build_provider(model.provider, api_key).stream(model.model, prepared)
+        started = time.monotonic()
+
+        async def _logged() -> AsyncIterator[str]:
+            # Logged when the stream actually finishes, not when it starts: a
+            # connection failure or a mid-response error must show up as
+            # status="error" in the audit trail, not "ok". This is the same
+            # defect class FallbackChain.execute's on_attempt asymmetry guards
+            # against on the chat() path.
+            try:
+                async for token in build_provider(model.provider, api_key).stream(
+                    model.model, prepared
+                ):
+                    yield token
+            except AIError as exc:
+                log_usage(self._record(
+                    tenant_id, user_id, model, purpose, intent, request_id,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    redacted=redacted, status="error", error_code=type(exc).__name__,
+                ))
+                raise
+            else:
+                log_usage(self._record(
+                    tenant_id, user_id, model, purpose, intent, request_id,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    redacted=redacted, status="ok",
+                ))
+
+        return _logged()
 
     def embed(
         self, *, tenant_id: str, texts: list[str], user_id: str | None = None,
-        local_only: bool = False, request_id: str | None = None,
+        local_only: bool = False, carries_sap_data: bool = False,
+        request_id: str | None = None,
     ) -> list[list[float]]:
         resolution = self.resolve_only(
             tenant_id=tenant_id, purpose=Purpose.EMBEDDING,
             required=frozenset({Capability.EMBEDDING}), local_only=local_only,
         )
         model = resolution.resolved
+        prepared, redacted = self._prepare_texts(model, texts, carries_sap_data)
         api_key = self.credential_for(model, tenant_id)
-        return build_provider(model.provider, api_key).embed(model.model, texts)
+        started = time.monotonic()
+        try:
+            vectors = build_provider(model.provider, api_key).embed(model.model, prepared)
+        except AIError as exc:
+            log_usage(self._record(
+                tenant_id, user_id, model, Purpose.EMBEDDING, None, request_id,
+                latency_ms=int((time.monotonic() - started) * 1000),
+                redacted=redacted, status="error", error_code=type(exc).__name__,
+            ))
+            raise
+        log_usage(self._record(
+            tenant_id, user_id, model, Purpose.EMBEDDING, None, request_id,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            redacted=redacted, status="ok",
+        ))
+        return vectors
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -205,6 +269,25 @@ class AIProviderManager:
             redaction_applied=redacted,
             status=status, error_code=error_code,
         )
+
+    def _log_resolution_failure(
+        self, tenant_id: str, user_id: str | None, purpose: Purpose | None,
+        intent: str | None, request_id: str | None, exc: AIError,
+    ) -> None:
+        """Record a dispatch that never reached a model: no provider_id or
+        model_id exists yet, so both are logged as None (both columns are
+        nullable for exactly this case). `authorization_result` distinguishes
+        "the tenant may not use this model" from every other resolution error.
+        """
+        log_usage(UsageRecord(
+            tenant_id=tenant_id, user_id=user_id, provider_id=None, model_id=None,
+            request_id=request_id, purpose=purpose.value if purpose else None,
+            intent=intent, tool_used=None,
+            authorization_result="denied" if isinstance(exc, ModelNotAuthorized) else "allowed",
+            prompt_tokens=0, completion_tokens=0, latency_ms=None,
+            fallback_used=False, fallback_from_model_id=None, egress_class=None,
+            redaction_applied=False, status="error", error_code=type(exc).__name__,
+        ))
 
     def _log_attempts(
         self, attempts: list[tuple[ResolvedModel, BaseException | None]],
