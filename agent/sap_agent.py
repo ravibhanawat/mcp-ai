@@ -366,26 +366,13 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
     @staticmethod
     def _sanitize_for_cloud(messages: list[dict]) -> list[dict]:
-        """
-        Strip SAP tool result payloads before sending to any cloud LLM.
+        """Deprecated: delegates to core.security.sanitize_sap_payload.
 
-        Tool result messages look like:
-          {"role": "user", "content": "SAP tool 'X' returned:\n{...sensitive data...}"}
-
-        These may contain employee salaries, vendor bank accounts, invoice amounts, etc.
-        We replace the payload with a placeholder so the LLM can still generate a coherent
-        follow-up prompt without leaking confidential enterprise data to a third party.
+        Removed in the cloud-fallback cleanup once every call site routes through
+        ai.manager, which applies the same protection to every external provider.
         """
-        sanitized = []
-        for msg in messages:
-            content = msg.get("content", "")
-            if isinstance(content, str) and content.startswith("SAP tool '") and "returned:" in content:
-                # Keep only the first line (tool name), drop the JSON payload
-                first_line = content.split("\n")[0]
-                sanitized.append({**msg, "content": f"{first_line}\n[SAP data redacted — not transmitted to cloud providers]"})
-            else:
-                sanitized.append(msg)
-        return sanitized
+        from core.security import sanitize_sap_payload
+        return sanitize_sap_payload(messages)
 
     def _call_cloud_fallback(self, messages: list[dict]) -> str:
         """

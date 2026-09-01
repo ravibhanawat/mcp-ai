@@ -124,5 +124,43 @@ class TestRedisGraceful(unittest.TestCase):
         self.assertEqual(len(k1), 32)
 
 
+class TestSanitizeSapPayload(unittest.TestCase):
+    """Moved out of SAPAgent so ai.manager can apply it to any provider, not
+    only to the agent's own cloud-fallback path."""
+
+    def test_strips_the_tool_result_payload(self):
+        from core.security import sanitize_sap_payload
+        messages = [{
+            "role": "user",
+            "content": "SAP tool 'get_payslip' returned:\n{\"salary\": 4200000}",
+        }]
+        out = sanitize_sap_payload(messages)
+        self.assertNotIn("4200000", out[0]["content"])
+        self.assertIn("get_payslip", out[0]["content"])
+        self.assertIn("redacted", out[0]["content"].lower())
+
+    def test_leaves_ordinary_messages_untouched(self):
+        from core.security import sanitize_sap_payload
+        messages = [{"role": "user", "content": "how do I run MIGO?"}]
+        self.assertEqual(messages, sanitize_sap_payload(messages))
+
+    def test_preserves_message_order_and_roles(self):
+        from core.security import sanitize_sap_payload
+        messages = [
+            {"role": "system", "content": "be helpful"},
+            {"role": "user", "content": "SAP tool 'x' returned:\n{\"a\": 1}"},
+            {"role": "assistant", "content": "ok"},
+        ]
+        out = sanitize_sap_payload(messages)
+        self.assertEqual(["system", "user", "assistant"], [m["role"] for m in out])
+        self.assertEqual("be helpful", out[0]["content"])
+
+    def test_does_not_mutate_the_input(self):
+        from core.security import sanitize_sap_payload
+        messages = [{"role": "user", "content": "SAP tool 'x' returned:\n{\"a\": 1}"}]
+        sanitize_sap_payload(messages)
+        self.assertIn("\"a\": 1", messages[0]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()

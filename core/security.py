@@ -137,3 +137,34 @@ def classify_for_cache(*, tool_called: str | None, text: str | None) -> tuple[bo
     if text and (_EMAIL_RE.search(text) or _CARD_RE.search(text)):
         return False, "response contains PII"
     return True, "ok"
+
+
+# ── SAP payload sanitisation ──────────────────────────────────────────────────
+
+def sanitize_sap_payload(messages: list[dict]) -> list[dict]:
+    """Strip SAP tool result bodies from a message list.
+
+    Tool results arrive as messages shaped:
+        "SAP tool 'X' returned:\\n{...}"
+    and may carry salaries, vendor bank details or invoice amounts. Keeping the
+    first line preserves enough context for the model to write a coherent
+    follow-up prompt without the record itself leaving the estate.
+
+    This lived on SAPAgent, where it only ever guarded that class's own cloud
+    fallback. It belongs here because ai.manager must be able to apply it to any
+    external provider, whichever agent made the call.
+
+    Returns a new list; the input is not mutated.
+    """
+    sanitized: list[dict] = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str) and content.startswith("SAP tool '") and "returned:" in content:
+            first_line = content.split("\n")[0]
+            sanitized.append({
+                **msg,
+                "content": f"{first_line}\n[SAP data redacted — not transmitted to external providers]",
+            })
+        else:
+            sanitized.append(dict(msg))
+    return sanitized
