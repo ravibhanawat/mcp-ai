@@ -33,7 +33,7 @@ async def iterate_in_thread(make_iterator: Callable[[], Iterator[str]]) -> Async
         try:
             for item in make_iterator():
                 q.put(item)
-        except BaseException as exc:      # noqa: BLE001 -- re-raised on the consumer side
+        except BaseException as exc:      # noqa: BLE001 — re-raised on the consumer side
             q.put(exc)
         finally:
             q.put(_SENTINEL)
