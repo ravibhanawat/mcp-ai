@@ -23,6 +23,11 @@ from ai.provider import AIProvider
 from ai.providers._stream import iterate_in_thread
 from ai.types import ChatResponse, HealthResult, Message, ModelConfig, ProviderType, Usage
 
+#: Azure requires an explicit API version on every request. ProviderConfig has
+#: no field for it yet, so this is the default until an ai_providers.api_version
+#: column exists; see the hand-off notes.
+AZURE_API_VERSION = "2024-02-01"
+
 
 class OpenAICompatProvider(AIProvider):
 
@@ -46,7 +51,13 @@ class OpenAICompatProvider(AIProvider):
     def _url(self, path: str) -> str:
         base = self.provider.base_url.rstrip("/")
         if self._is_azure and self.provider.deployment_name:
-            return f"{base}{path}/openai/deployments/{self.provider.deployment_name}"
+            # Azure namespaces by deployment and does not use the /v1 prefix:
+            #   {base}/openai/deployments/{deployment}/chat/completions
+            suffix = path[len("/v1"):] if path.startswith("/v1") else path
+            return (
+                f"{base}/openai/deployments/{self.provider.deployment_name}"
+                f"{suffix}?api-version={AZURE_API_VERSION}"
+            )
         return f"{base}{path}"
 
     def _fail(self, exc: Exception, model_identifier: str | None = None) -> NoReturn:

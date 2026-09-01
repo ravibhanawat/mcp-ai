@@ -10,10 +10,17 @@ all four adapters:
     POST /api/chat                  Ollama chat
     POST /api/embeddings            Ollama embeddings
     GET  /api/tags                  Ollama model list
-    POST /v1/chat/completions       OpenAI-compatible chat
-    POST /v1/embeddings             OpenAI-compatible embeddings
-    GET  /v1/models                 OpenAI-compatible model list
-    POST /v1/messages               Anthropic messages
+    POST .../chat/completions       OpenAI-compatible chat
+    POST .../embeddings             OpenAI-compatible embeddings
+    GET  .../models                 OpenAI-compatible model list
+    POST .../messages               Anthropic messages
+
+The OpenAI-compatible routes match on endpoint suffix rather than a fixed
+`/v1/...` prefix, because Azure OpenAI namespaces the same endpoints under
+`/openai/deployments/<name>/...` and appends an `?api-version=...` query
+string — neither of which starts with `/v1`. Ollama's `/api/*` routes are
+matched first and exactly, since their response shapes differ and must not
+collapse into the OpenAI-compatible branches.
 """
 from __future__ import annotations
 
@@ -66,11 +73,13 @@ class _Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        self._server.paths_seen.append(self.path)
+
         if self._guard():
             return
         if self.path.startswith("/api/tags"):
             self._send(200, {"models": [{"name": self._server.model_name}]})
-        elif self.path.startswith("/v1/models"):
+        elif "/models" in self.path:
             self._send(200, {"data": [{"id": self._server.model_name}]})
         else:
             self._send(404, {"error": "not found"})
@@ -84,11 +93,18 @@ class _Handler(BaseHTTPRequestHandler):
             body = {}
         self._server.requests.append(body)
         self._server.headers_seen.append(dict(self.headers))
+        self._server.paths_seen.append(self.path)
 
         if self._guard():
             return
 
         reply = self._server.reply_text
+        # /api/* (Ollama's native surface) is matched first and exactly, since
+        # its response shapes differ from the OpenAI-compatible ones below and
+        # must not collapse into them. Everything else is matched on endpoint
+        # suffix rather than a fixed prefix, because Azure's URL namespaces the
+        # same endpoints under /openai/deployments/<name>/... and carries an
+        # ?api-version=... query string — neither of which starts with /v1.
         if self.path.startswith("/api/chat"):
             if body.get("stream"):
                 self._send_ollama_stream(reply)
@@ -97,7 +113,7 @@ class _Handler(BaseHTTPRequestHandler):
                                  "prompt_eval_count": 11, "eval_count": 7})
         elif self.path.startswith("/api/embeddings"):
             self._send(200, {"embedding": [0.1, 0.2, 0.3]})
-        elif self.path.startswith("/v1/chat/completions"):
+        elif "/chat/completions" in self.path:
             if body.get("stream"):
                 self._send_sse_stream(reply)
             else:
@@ -105,9 +121,9 @@ class _Handler(BaseHTTPRequestHandler):
                     "choices": [{"message": {"role": "assistant", "content": reply}}],
                     "usage": {"prompt_tokens": 11, "completion_tokens": 7},
                 })
-        elif self.path.startswith("/v1/embeddings"):
+        elif "/embeddings" in self.path:
             self._send(200, {"data": [{"embedding": [0.1, 0.2, 0.3]}]})
-        elif self.path.startswith("/v1/messages"):
+        elif "/messages" in self.path:
             self._send(200, {
                 "content": [{"type": "text", "text": reply}],
                 "usage": {"input_tokens": 11, "output_tokens": 7},
@@ -158,6 +174,7 @@ class FakeProviderServer:
         self.model_name = model_name
         self.requests: list[dict] = []
         self.headers_seen: list[dict] = []
+        self.paths_seen: list[str] = []
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 

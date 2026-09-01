@@ -177,6 +177,19 @@ class TestOpenAICompatChat(unittest.TestCase):
             sent = s.headers_seen[0].get("Authorization", "")
             self.assertNotIn("ambient", sent)
 
+    def test_never_falls_back_to_the_ambient_key_when_none_is_configured(self):
+        """Closes the gap in the case above: this must hold even when the
+        caller passes no explicit key at all — the exact fallback litellm
+        performs and this adapter must never perform."""
+        with FakeProviderServer(mode="ok") as s:
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-ambient-must-not-leak"}):
+                OpenAICompatProvider(openai_provider_at(s.base_url), api_key=None).chat(
+                    a_model(), MESSAGES
+                )
+            headers = s.headers_seen[0]
+            self.assertNotIn("Authorization", headers)
+            self.assertNotIn("api-key", headers)
+
     def test_azure_builds_deployment_url_and_api_key_header(self):
         with FakeProviderServer(mode="ok") as s:
             p = OpenAICompatProvider(
@@ -187,6 +200,10 @@ class TestOpenAICompatChat(unittest.TestCase):
             p.chat(a_model(), MESSAGES)
             self.assertEqual("azure-key", s.headers_seen[0]["api-key"])
             self.assertNotIn("Authorization", s.headers_seen[0])
+            path = s.paths_seen[0]
+            self.assertIn("/openai/deployments/my-deployment/chat/completions", path)
+            self.assertNotIn("/v1/chat/completions", path)
+            self.assertIn("api-version=", path)
 
     def test_sends_organization_header_when_configured(self):
         with FakeProviderServer(mode="ok") as s:
