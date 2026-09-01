@@ -1,10 +1,13 @@
 """Adapter tests. Every case runs against the fake provider server rather than a
 mock, so socket handling, timeouts and error mapping are all exercised for real."""
 import asyncio
+import os
 import unittest
+from unittest.mock import patch
 
 from ai.errors import AuthFailed, ModelTimeout, ProviderUnavailable, RateLimited
 from ai.providers.ollama import OllamaProvider
+from ai.providers.openai_compat import OpenAICompatProvider
 from ai.types import Message, ModelConfig, ProviderConfig, ProviderType, Purpose
 from tests.fakes.fake_provider_server import FakeProviderServer
 
@@ -135,6 +138,101 @@ class TestOllamaEmbedHealthAndList(unittest.TestCase):
 
     def test_list_models_returns_empty_when_unreachable(self):
         self.assertEqual([], OllamaProvider(provider_at("http://127.0.0.1:1")).list_models())
+
+
+def openai_provider_at(url, ptype=ProviderType.OPENAI, **over):
+    base = dict(
+        id="p2", tenant_id="default", name="Fake OpenAI", provider_type=ptype,
+        base_url=url, organization_id=None, deployment_name=None,
+        timeout_seconds=1, max_retries=0, egress_class="external",
+        sap_data_permitted=False, is_active=True,
+    )
+    base.update(over)
+    return ProviderConfig(**base)
+
+
+class TestOpenAICompatChat(unittest.TestCase):
+
+    def test_returns_content_and_usage(self):
+        with FakeProviderServer(mode="ok", reply_text="pong") as s:
+            p = OpenAICompatProvider(openai_provider_at(s.base_url), api_key="sk-test")
+            resp = p.chat(a_model(), MESSAGES)
+            self.assertEqual("pong", resp.content)
+            self.assertEqual(11, resp.usage.prompt_tokens)
+
+    def test_sends_bearer_credential_from_argument(self):
+        with FakeProviderServer(mode="ok") as s:
+            OpenAICompatProvider(openai_provider_at(s.base_url), api_key="sk-explicit").chat(
+                a_model(), MESSAGES
+            )
+            self.assertEqual("Bearer sk-explicit", s.headers_seen[0]["Authorization"])
+
+    def test_never_reads_the_ambient_environment_key(self):
+        """The reason this codebase does not use litellm. Must stay true."""
+        with FakeProviderServer(mode="ok") as s:
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-ambient-must-not-leak"}):
+                OpenAICompatProvider(openai_provider_at(s.base_url), api_key="sk-explicit").chat(
+                    a_model(), MESSAGES
+                )
+            sent = s.headers_seen[0].get("Authorization", "")
+            self.assertNotIn("ambient", sent)
+
+    def test_azure_builds_deployment_url_and_api_key_header(self):
+        with FakeProviderServer(mode="ok") as s:
+            p = OpenAICompatProvider(
+                openai_provider_at(s.base_url, ProviderType.AZURE_OPENAI,
+                                   deployment_name="my-deployment"),
+                api_key="azure-key",
+            )
+            p.chat(a_model(), MESSAGES)
+            self.assertEqual("azure-key", s.headers_seen[0]["api-key"])
+            self.assertNotIn("Authorization", s.headers_seen[0])
+
+    def test_sends_organization_header_when_configured(self):
+        with FakeProviderServer(mode="ok") as s:
+            OpenAICompatProvider(
+                openai_provider_at(s.base_url, organization_id="org-123"), api_key="k"
+            ).chat(a_model(), MESSAGES)
+            self.assertEqual("org-123", s.headers_seen[0]["OpenAI-Organization"])
+
+    def test_401_maps_to_auth_failed(self):
+        with FakeProviderServer(mode="unauthorized") as s:
+            with self.assertRaises(AuthFailed):
+                OpenAICompatProvider(openai_provider_at(s.base_url), api_key="k").chat(
+                    a_model(), MESSAGES
+                )
+
+    def test_429_maps_to_rate_limited(self):
+        with FakeProviderServer(mode="rate_limited") as s:
+            with self.assertRaises(RateLimited):
+                OpenAICompatProvider(openai_provider_at(s.base_url), api_key="k").chat(
+                    a_model(), MESSAGES
+                )
+
+    def test_timeout_maps_to_model_timeout(self):
+        with FakeProviderServer(mode="slow") as s:
+            with self.assertRaises(ModelTimeout):
+                OpenAICompatProvider(
+                    openai_provider_at(s.base_url, timeout_seconds=1), api_key="k"
+                ).chat(a_model(), MESSAGES)
+
+    def test_stream_yields_tokens_from_sse(self):
+        async def run(p):
+            return [t async for t in p.stream(a_model(), MESSAGES)]
+
+        with FakeProviderServer(mode="ok", reply_text="alpha beta") as s:
+            p = OpenAICompatProvider(openai_provider_at(s.base_url), api_key="k")
+            self.assertEqual("alpha beta ", "".join(asyncio.run(run(p))))
+
+    def test_embed_returns_vectors(self):
+        with FakeProviderServer(mode="ok") as s:
+            p = OpenAICompatProvider(openai_provider_at(s.base_url), api_key="k")
+            self.assertEqual([[0.1, 0.2, 0.3]], p.embed(a_model(), ["text"]))
+
+    def test_list_models_returns_identifiers(self):
+        with FakeProviderServer(mode="ok", model_name="cfg-model") as s:
+            p = OpenAICompatProvider(openai_provider_at(s.base_url), api_key="k")
+            self.assertEqual(["cfg-model"], p.list_models())
 
 
 if __name__ == "__main__":
