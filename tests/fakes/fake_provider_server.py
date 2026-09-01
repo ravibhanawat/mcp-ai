@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 #: How long "slow" mode sleeps. Longer than any adapter timeout used in tests.
 SLOW_DELAY_SECONDS = 5.0
@@ -158,17 +158,20 @@ class FakeProviderServer:
         self.model_name = model_name
         self.requests: list[dict] = []
         self.headers_seen: list[dict] = []
-        self._httpd: HTTPServer | None = None
+        self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     @property
     def base_url(self) -> str:
         assert self._httpd is not None, "server not started"
-        host, port = self._httpd.server_address[:2]
+        port = self._httpd.server_address[1]
         return f"http://127.0.0.1:{port}"
 
     def __enter__(self) -> "FakeProviderServer":
-        self._httpd = HTTPServer(("127.0.0.1", 0), _Handler)
+        # Threaded so a slow-mode handler blocked in time.sleep() doesn't make
+        # shutdown() in __exit__ wait for it to finish (daemon_threads=True by
+        # default on ThreadingHTTPServer, so no thread outlives the process either).
+        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self._httpd.fake = self          # handler reads state from here
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
