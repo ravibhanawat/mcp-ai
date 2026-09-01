@@ -9,6 +9,8 @@ from cryptography.fernet import Fernet
 from ai.credentials import (
     UNCHANGED_SENTINEL,
     credential_display,
+    delete_credential,
+    has_credential,
     is_unchanged,
     read_credential,
     store_credential,
@@ -26,8 +28,13 @@ class FakeRows:
 
     def execute(self, sql, params):
         if sql.strip().upper().startswith("DELETE"):
-            self.rows.pop(params[0], None)
-            return 1
+            provider_id, tenant_id = params
+            row = self.rows.get(provider_id)
+            # Mirror the production WHERE clause: a tenant may only delete its own.
+            if row and row["tenant_id"] == tenant_id:
+                del self.rows[provider_id]
+                return 1
+            return 0
         provider_id, tenant_id, ciphertext, key_version, last4 = params
         self.rows[provider_id] = {
             "provider_id": provider_id, "tenant_id": tenant_id,
@@ -84,6 +91,25 @@ class TestCredentialRoundtrip(CredentialTestCase):
 
     def test_display_is_empty_when_no_credential(self):
         self.assertEqual("", credential_display("nope", "default"))
+
+    def test_delete_removes_the_credential(self):
+        store_credential("p1", "default", "sk-live-abcdwxyz")
+        delete_credential("p1", "default")
+        self.assertIsNone(read_credential("p1", "default"))
+
+    def test_delete_from_another_tenant_leaves_the_row_intact(self):
+        """The tenant filter on DELETE is what stops one tenant from destroying
+        another's credential. Confirmed to fail if that filter is dropped from
+        the production SQL — see task-9-report.md for the experiment."""
+        store_credential("p1", "default", "sk-live-abcdwxyz")
+        delete_credential("p1", "other-tenant")
+        self.assertEqual("sk-live-abcdwxyz", read_credential("p1", "default"))
+
+    def test_has_credential_reflects_presence(self):
+        self.assertFalse(has_credential("p1", "default"))
+        store_credential("p1", "default", "sk-live-abcdwxyz")
+        self.assertTrue(has_credential("p1", "default"))
+        self.assertFalse(has_credential("p1", "other-tenant"))
 
 
 class TestKeyFailures(CredentialTestCase):
