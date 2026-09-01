@@ -325,6 +325,31 @@ class TestStreamLogging(ManagerTestCase):
         record = logged.call_args[0][0]
         self.assertEqual("cancelled", record.status)
 
+    def test_a_task_cancelled_stream_is_logged_as_cancelled(self):
+        """asyncio.CancelledError -- not GeneratorExit -- is what a real ASGI
+        server throws into the generator when a client disconnects mid-stream.
+        It must be told apart from a clean finish, not fall through to the
+        default status="ok"."""
+        with FakeProviderServer(mode="ok", reply_text="hello world foo bar baz") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                manager = self.build(s.base_url)
+
+                async def run():
+                    gen = manager.stream(
+                        tenant_id="default", purpose=Purpose.CHAT,
+                        messages=[{"role": "user", "content": "hi"}],
+                    )
+                    async for _ in gen:
+                        break
+                    with self.assertRaises(asyncio.CancelledError):
+                        await gen.athrow(asyncio.CancelledError())
+
+                asyncio.run(run())
+        self.assertEqual(1, logged.call_count)
+        record = logged.call_args[0][0]
+        self.assertEqual("cancelled", record.status)
+
 
 if __name__ == "__main__":
     unittest.main()

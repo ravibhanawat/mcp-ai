@@ -15,6 +15,7 @@ forgotten.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, AsyncIterator
@@ -203,12 +204,22 @@ class AIProviderManager:
             except AIError as exc:
                 status, error_code = "error", type(exc).__name__
                 raise
-            except GeneratorExit:
-                # The consumer stopped early. A cancelled stream is still a
-                # dispatch that happened and must not vanish from the audit
-                # trail — but it is not a provider failure, so it gets its
-                # own status rather than overloading "error".
+            except (GeneratorExit, asyncio.CancelledError):
+                # Consumer went away: an explicit close (GeneratorExit), or
+                # ASGI task cancellation on client disconnect
+                # (asyncio.CancelledError) — the shape a real StreamingResponse
+                # uses. Either way this is still a dispatch that happened and
+                # must not vanish from, or be mis-recorded in, the audit trail.
                 status = "cancelled"
+                raise
+            except BaseException as exc:
+                # Nothing may reach `finally` with the default "ok" still set:
+                # this is the catch-all that makes that impossible, rather than
+                # a fourth type to enumerate. Every branch above already
+                # re-raises, so this changes no control flow — it only makes
+                # sure the logged status is truthful before the exception
+                # continues.
+                status, error_code = "error", type(exc).__name__
                 raise
             finally:
                 log_usage(self._record(
