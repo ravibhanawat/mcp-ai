@@ -3,7 +3,7 @@ mapping and, above all, that a broken writer cannot break a chat request."""
 import unittest
 from unittest.mock import patch
 
-from ai.health import is_known_unreachable, probe, record_health
+from ai.health import is_known_unreachable, last_health, probe, record_health
 from ai.types import Capability, HealthResult, Purpose
 from ai.usage import UsageRecord, log_usage
 from tests.fakes.fake_provider_server import FakeProviderServer
@@ -69,6 +69,14 @@ class TestHealthProbe(unittest.TestCase):
         self.assertEqual("unreachable", result.status)
         self.assertIsNotNone(result.error)
 
+    def test_probe_survives_a_provider_construction_failure(self):
+        """build_provider raises for an unknown provider_type, before any adapter
+        exists to catch it - probe()'s own guard is the only thing in the way."""
+        with patch("ai.health.build_provider", side_effect=RuntimeError("no adapter")):
+            result = probe(self._resolved("http://127.0.0.1:1"), api_key=None)
+        self.assertEqual("unreachable", result.status)
+        self.assertIsNotNone(result.error)
+
 
 class TestHealthRecording(unittest.TestCase):
 
@@ -85,6 +93,15 @@ class TestHealthRecording(unittest.TestCase):
         with patch("ai.health._query_one", return_value={"status": "unreachable"}):
             self.assertTrue(is_known_unreachable("m1", "default"))
         with patch("ai.health._query_one", return_value={"status": "healthy"}):
+            self.assertFalse(is_known_unreachable("m1", "default"))
+
+    def test_last_health_survives_a_database_failure(self):
+        with patch("ai.health._query_one", side_effect=RuntimeError("db down")):
+            self.assertIsNone(last_health("m1", "default"))
+
+    def test_is_known_unreachable_is_false_when_the_database_fails(self):
+        """A DB outage must not make every model look broken."""
+        with patch("ai.health._query_one", side_effect=RuntimeError("db down")):
             self.assertFalse(is_known_unreachable("m1", "default"))
 
 
