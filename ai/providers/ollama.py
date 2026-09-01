@@ -9,7 +9,8 @@ usage log wants.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Iterator
+import time
+from typing import Any, AsyncIterator, Iterator, NoReturn
 
 import requests
 
@@ -23,7 +24,7 @@ class OllamaProvider(AIProvider):
 
     # ── error mapping ────────────────────────────────────────────────────────
 
-    def _fail(self, exc: Exception, model_identifier: str | None = None):
+    def _fail(self, exc: Exception, model_identifier: str | None = None) -> NoReturn:
         """Translate a transport failure into the shared taxonomy and raise."""
         ctx = {"provider_name": self.provider.name, "model_identifier": model_identifier}
         if isinstance(exc, requests.exceptions.Timeout):
@@ -63,7 +64,15 @@ class OllamaProvider(AIProvider):
 
     # ── AIProvider ───────────────────────────────────────────────────────────
 
-    def chat(self, model, messages, *, tools=None, temperature=None, max_tokens=None) -> ChatResponse:
+    def chat(
+        self,
+        model: ModelConfig,
+        messages: list[Message],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> ChatResponse:
         payload = self._payload(model, messages, temperature, max_tokens, stream=False)
         if tools:
             payload["tools"] = tools
@@ -84,7 +93,14 @@ class OllamaProvider(AIProvider):
         except Exception as exc:
             self._fail(exc, model.model_identifier)
 
-    def stream(self, model, messages, *, temperature=None, max_tokens=None) -> AsyncIterator[str]:
+    def stream(
+        self,
+        model: ModelConfig,
+        messages: list[Message],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[str]:
         payload = self._payload(model, messages, temperature, max_tokens, stream=True)
 
         def _tokens() -> Iterator[str]:
@@ -108,7 +124,7 @@ class OllamaProvider(AIProvider):
 
         return iterate_in_thread(_tokens)
 
-    def embed(self, model, texts: list[str]) -> list[list[float]]:
+    def embed(self, model: ModelConfig, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         try:
             for text in texts:
@@ -124,7 +140,6 @@ class OllamaProvider(AIProvider):
             self._fail(exc, model.model_identifier)
 
     def health_check(self) -> HealthResult:
-        import time
         started = time.monotonic()
         try:
             resp = requests.get(self._url("/api/tags"), timeout=self.provider.timeout_seconds)
