@@ -27,6 +27,11 @@ from ai.types import ChatResponse, HealthResult, Message, ModelConfig, Usage
 
 ANTHROPIC_VERSION = "2023-06-01"
 
+#: Sent only to elicit a response. Anthropic has no cheap ping and no model
+#: listing, so reachability is proven by ANY parsed reply — including the
+#: 404 "unknown model" this deliberately provokes. Never a real model id.
+_HEALTH_PROBE_MODEL = "__health_probe__"
+
 
 class AnthropicProvider(AIProvider):
 
@@ -166,21 +171,32 @@ class AnthropicProvider(AIProvider):
         )
 
     def health_check(self) -> HealthResult:
-        """No cheap ping exists, so send a one-token message and time it."""
+        """No cheap ping exists, so send a one-token message and classify by
+        outcome rather than HTTP status.
+
+        This method answers one question — "is the endpoint reachable and is
+        the credential accepted?" — not "does this model exist?". A 404
+        "unknown model" for `_HEALTH_PROBE_MODEL` is therefore a *successful*
+        answer: it proves the request reached the server, was parsed, and was
+        authenticated. Only a transport failure or a rejected credential make
+        this unhealthy.
+        """
         started = time.monotonic()
         try:
             resp = requests.post(
                 self._url("/v1/messages"),
-                json={"model": "health-probe", "max_tokens": 1,
+                json={"model": _HEALTH_PROBE_MODEL, "max_tokens": 1,
                       "messages": [{"role": "user", "content": "hi"}]},
                 headers=self._headers(), timeout=self.provider.timeout_seconds,
             )
-            resp.raise_for_status()
-            return HealthResult("healthy", int((time.monotonic() - started) * 1000))
         except Exception as exc:
             return HealthResult(
                 "unreachable", int((time.monotonic() - started) * 1000), str(exc)[:500]
             )
+        latency_ms = int((time.monotonic() - started) * 1000)
+        if resp.status_code in (401, 403):
+            return HealthResult("unreachable", latency_ms, "credential rejected")
+        return HealthResult("healthy", latency_ms)
 
     def list_models(self) -> list[str]:
         return []

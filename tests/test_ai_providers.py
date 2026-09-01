@@ -3,7 +3,7 @@ mock, so socket handling, timeouts and error mapping are all exercised for real.
 import asyncio
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ai.errors import AuthFailed, ModelTimeout, ProviderUnavailable, RateLimited
 from ai.providers.ollama import OllamaProvider
@@ -334,6 +334,42 @@ class TestAnthropicAdapter(unittest.TestCase):
             self.assertEqual(
                 [], AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").list_models()
             )
+
+
+class TestAnthropicHealthCheck(unittest.TestCase):
+    """health_check() answers 'is the endpoint reachable and the credential
+    accepted?' — not 'does this model exist?'. Only a transport failure or a
+    rejected credential should ever report unhealthy."""
+
+    def test_reports_healthy_on_a_normal_reply(self):
+        with FakeProviderServer(mode="ok") as s:
+            result = AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").health_check()
+            self.assertEqual("healthy", result.status)
+            self.assertGreaterEqual(result.latency_ms, 0)
+
+    def test_401_reports_unreachable_with_credential_rejected(self):
+        with FakeProviderServer(mode="unauthorized") as s:
+            result = AnthropicProvider(anthropic_provider_at(s.base_url), api_key="k").health_check()
+            self.assertEqual("unreachable", result.status)
+            self.assertEqual("credential rejected", result.error)
+
+    def test_unreachable_host_reports_unreachable(self):
+        result = AnthropicProvider(
+            anthropic_provider_at("http://127.0.0.1:1"), api_key="k"
+        ).health_check()
+        self.assertEqual("unreachable", result.status)
+        self.assertIsNotNone(result.error)
+
+    def test_404_unknown_model_counts_as_healthy(self):
+        """The fake server always answers 200, so a real 404 — the actual shape
+        a live Anthropic backend returns for the deliberately-fake probe model —
+        is exercised by patching the transport for this one case."""
+        fake_response = MagicMock(status_code=404)
+        with patch("ai.providers.anthropic_provider.requests.post", return_value=fake_response):
+            result = AnthropicProvider(
+                anthropic_provider_at("http://example.invalid"), api_key="k"
+            ).health_check()
+            self.assertEqual("healthy", result.status)
 
 
 class TestProviderRegistry(unittest.TestCase):
