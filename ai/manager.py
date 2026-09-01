@@ -183,23 +183,38 @@ class AIProviderManager:
             # status="error" in the audit trail, not "ok". This is the same
             # defect class FallbackChain.execute's on_attempt asymmetry guards
             # against on the chat() path.
+            #
+            # The status is decided in each branch but logged once, in
+            # `finally`, because a consumer that stops early (a UI stop
+            # button, a dropped connection, garbage collection) throws
+            # GeneratorExit at the suspended `yield` below — a BaseException,
+            # not an Exception, so `except AIError` never sees it. Without the
+            # `finally`, that path logged nothing at all: the dispatch simply
+            # vanished from the audit trail. `log_usage` never raises, so
+            # calling it here is safe; nothing is ever `yield`ed inside this
+            # `finally`, which would raise RuntimeError during GeneratorExit
+            # handling.
+            status, error_code = "ok", None
             try:
                 async for token in build_provider(model.provider, api_key).stream(
                     model.model, prepared
                 ):
                     yield token
             except AIError as exc:
-                log_usage(self._record(
-                    tenant_id, user_id, model, purpose, intent, request_id,
-                    latency_ms=int((time.monotonic() - started) * 1000),
-                    redacted=redacted, status="error", error_code=type(exc).__name__,
-                ))
+                status, error_code = "error", type(exc).__name__
                 raise
-            else:
+            except GeneratorExit:
+                # The consumer stopped early. A cancelled stream is still a
+                # dispatch that happened and must not vanish from the audit
+                # trail — but it is not a provider failure, so it gets its
+                # own status rather than overloading "error".
+                status = "cancelled"
+                raise
+            finally:
                 log_usage(self._record(
                     tenant_id, user_id, model, purpose, intent, request_id,
                     latency_ms=int((time.monotonic() - started) * 1000),
-                    redacted=redacted, status="ok",
+                    redacted=redacted, status=status, error_code=error_code,
                 ))
 
         return _logged()

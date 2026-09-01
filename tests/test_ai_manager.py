@@ -302,6 +302,29 @@ class TestStreamLogging(ManagerTestCase):
         self.assertEqual("error", record.status)
         self.assertEqual("AuthFailed", record.error_code)
 
+    def test_a_cancelled_stream_is_logged_as_cancelled(self):
+        """The consumer stopping early -- a UI stop button, a dropped
+        connection, garbage collection -- throws GeneratorExit at the
+        suspended yield. That must still produce a usage row."""
+        with FakeProviderServer(mode="ok", reply_text="hello world foo bar baz") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                manager = self.build(s.base_url)
+
+                async def run():
+                    gen = manager.stream(
+                        tenant_id="default", purpose=Purpose.CHAT,
+                        messages=[{"role": "user", "content": "hi"}],
+                    )
+                    async for _ in gen:
+                        break
+                    await gen.aclose()
+
+                asyncio.run(run())
+        self.assertEqual(1, logged.call_count)
+        record = logged.call_args[0][0]
+        self.assertEqual("cancelled", record.status)
+
 
 if __name__ == "__main__":
     unittest.main()
