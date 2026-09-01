@@ -2,8 +2,6 @@
 implementation and a stubbed clock; the Postgres implementation is exercised in
 tests/test_ai_admin_api.py, which needs a database anyway."""
 import json
-import os
-import tempfile
 import unittest
 
 from ai.types import Capability, Purpose
@@ -60,6 +58,27 @@ class TestInMemoryStoreContract(unittest.TestCase):
     def test_is_user_selectable_defaults_false(self):
         """Users must not be able to select a model nobody marked selectable."""
         self.assertFalse(self.store.is_user_selectable("default", "m1"))
+
+    def test_get_capabilities_from_another_tenant_returns_empty(self):
+        """Capabilities carry no secrets, but the tenant filter has no exceptions."""
+        self.assertEqual(frozenset(), self.store.get_capabilities("m1", "other-tenant"))
+
+    def test_same_id_across_tenants_does_not_collide(self):
+        """A provider or model id is only unique within a tenant, not globally."""
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", tenant_id="tenant-a", name="Provider A"))
+        store.add_provider(make_provider_row(id="p1", tenant_id="tenant-b", name="Provider B"))
+        store.add_model(
+            make_model_row(id="m1", tenant_id="tenant-a", provider_id="p1", model_name="Model A")
+        )
+        store.add_model(
+            make_model_row(id="m1", tenant_id="tenant-b", provider_id="p1", model_name="Model B")
+        )
+
+        self.assertEqual("Provider A", store.get_provider("p1", "tenant-a").name)
+        self.assertEqual("Provider B", store.get_provider("p1", "tenant-b").name)
+        self.assertEqual("Model A", store.get_model("m1", "tenant-a").model_name)
+        self.assertEqual("Model B", store.get_model("m1", "tenant-b").model_name)
 
 
 class TestSnapshot(unittest.TestCase):

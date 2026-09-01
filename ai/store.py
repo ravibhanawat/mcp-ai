@@ -61,7 +61,7 @@ class ConfigStore(ABC):
     ) -> list[ModelConfig]: ...
 
     @abstractmethod
-    def get_capabilities(self, model_id: str) -> frozenset[Capability]: ...
+    def get_capabilities(self, model_id: str, tenant_id: str) -> frozenset[Capability]: ...
 
     @abstractmethod
     def get_routing_rules(
@@ -85,7 +85,7 @@ class ConfigStore(ABC):
         provider = self.get_provider(model.provider_id, tenant_id)
         if provider is None:
             return None
-        return ResolvedModel(model, provider, self.get_capabilities(model_id))
+        return ResolvedModel(model, provider, self.get_capabilities(model_id, tenant_id))
 
 
 def default_policy(tenant_id: str) -> TenantPolicy:
@@ -176,39 +176,44 @@ class PostgresConfigStore(ConfigStore):
                 "SELECT * FROM ai_providers WHERE tenant_id = %s ORDER BY name", (tenant_id,)
             )
             return [provider_from_row(r) for r in rows]
-        return self._cached(f"providers:{tenant_id}", load)
+        # Copy: the cache hands out one shared list, and a caller that sorts or
+        # appends in place must not corrupt it for every other reader until the
+        # TTL expires.
+        return list(self._cached(f"providers:{tenant_id}", load))
 
     def get_provider(self, provider_id: str, tenant_id: str) -> ProviderConfig | None:
         return next(
             (p for p in self.list_providers(tenant_id) if p.id == provider_id), None
         )
 
-    def list_models(self, tenant_id, purpose=None, active_only=True) -> list[ModelConfig]:
+    def list_models(
+        self, tenant_id: str, purpose: Purpose | None = None, active_only: bool = True
+    ) -> list[ModelConfig]:
         def load():
             from db.connection import query_all
             rows = query_all(
                 "SELECT * FROM ai_models WHERE tenant_id = %s ORDER BY model_name", (tenant_id,)
             )
             return [model_from_row(r) for r in rows]
-        models = self._cached(f"models:{tenant_id}", load)
+        models = list(self._cached(f"models:{tenant_id}", load))
         if purpose is not None:
             models = [m for m in models if m.purpose == purpose]
         if active_only:
             models = [m for m in models if m.is_active]
-        return list(models)
+        return models
 
     def get_model(self, model_id: str, tenant_id: str) -> ModelConfig | None:
         return next(
             (m for m in self.list_models(tenant_id, active_only=False) if m.id == model_id), None
         )
 
-    def get_capabilities(self, model_id: str) -> frozenset[Capability]:
+    def get_capabilities(self, model_id: str, tenant_id: str) -> frozenset[Capability]:
         def load():
             from db.connection import query_all
             rows = query_all(
                 "SELECT capability FROM ai_model_capabilities "
-                "WHERE model_id = %s AND supported IS TRUE",
-                (model_id,),
+                "WHERE model_id = %s AND tenant_id = %s AND supported IS TRUE",
+                (model_id, tenant_id),
             )
             out = set()
             for r in rows:
@@ -217,9 +222,12 @@ class PostgresConfigStore(ConfigStore):
                 except ValueError:
                     _logger.warning("Unknown capability %r on model %s", r["capability"], model_id)
             return frozenset(out)
-        return self._cached(f"caps:{model_id}", load)
+        # Tenant is part of the cache key: two tenants must never share an entry.
+        return self._cached(f"caps:{tenant_id}:{model_id}", load)
 
-    def get_routing_rules(self, tenant_id, rule_type, match_key=None) -> list[RoutingRule]:
+    def get_routing_rules(
+        self, tenant_id: str, rule_type: str, match_key: str | None = None
+    ) -> list[RoutingRule]:
         def load():
             from db.connection import query_all
             rows = query_all(
@@ -303,7 +311,7 @@ def snapshot_payload(store: ConfigStore, tenant_id: str = DEFAULT_TENANT) -> dic
                 "purpose": m.purpose.value, "context_window": m.context_window,
                 "max_tokens": m.max_tokens, "temperature": m.temperature,
                 "prompt_profile": m.prompt_profile, "is_active": m.is_active,
-                "capabilities": sorted(c.value for c in store.get_capabilities(m.id)),
+                "capabilities": sorted(c.value for c in store.get_capabilities(m.id, tenant_id)),
             }
             for m in store.list_models(tenant_id, active_only=False)
         ],
