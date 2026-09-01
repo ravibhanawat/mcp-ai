@@ -159,11 +159,19 @@ class AIProviderManager:
         partial answers to the user. If the primary cannot stream, the caller
         falls back to non-streaming chat.
         """
-        resolution = self.resolve_only(
-            tenant_id=tenant_id, purpose=purpose, intent=intent,
-            requested_model_id=requested_model_id,
-            required=frozenset({Capability.STREAMING}), local_only=local_only,
-        )
+        try:
+            resolution = self.resolve_only(
+                tenant_id=tenant_id, purpose=purpose, intent=intent,
+                requested_model_id=requested_model_id,
+                required=frozenset({Capability.STREAMING}), local_only=local_only,
+            )
+        except AIError as exc:
+            # A CapabilityUnsupported here — the configured chat model cannot
+            # stream — is a routine, expected outcome an administrator will
+            # want to see recorded, not silently absorbed by the caller's
+            # non-streaming fallback.
+            self._log_resolution_failure(tenant_id, user_id, purpose, intent, request_id, exc)
+            raise
         model = resolution.resolved
         prepared, redacted = self._prepare(model, messages, carries_sap_data)
         api_key = self.credential_for(model, tenant_id)
@@ -201,10 +209,16 @@ class AIProviderManager:
         local_only: bool = False, carries_sap_data: bool = False,
         request_id: str | None = None,
     ) -> list[list[float]]:
-        resolution = self.resolve_only(
-            tenant_id=tenant_id, purpose=Purpose.EMBEDDING,
-            required=frozenset({Capability.EMBEDDING}), local_only=local_only,
-        )
+        try:
+            resolution = self.resolve_only(
+                tenant_id=tenant_id, purpose=Purpose.EMBEDDING,
+                required=frozenset({Capability.EMBEDDING}), local_only=local_only,
+            )
+        except AIError as exc:
+            self._log_resolution_failure(
+                tenant_id, user_id, Purpose.EMBEDDING, None, request_id, exc
+            )
+            raise
         model = resolution.resolved
         prepared, redacted = self._prepare_texts(model, texts, carries_sap_data)
         api_key = self.credential_for(model, tenant_id)
