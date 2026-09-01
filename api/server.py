@@ -15,6 +15,8 @@ Enterprise security hardening:
   - Generic error messages to clients; full tracebacks only in server logs
   - Default bind: 127.0.0.1 (override via HOST env var)
 """
+import contextlib
+import contextvars
 import hashlib
 import logging
 import os
@@ -37,7 +39,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 
 from agent.sap_agent import SAPAgent, _DecimalEncoder as _JsonEncoder
@@ -116,6 +118,16 @@ if not _cors_raw:
         sys.exit(1)
 else:
     _allowed_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+    if "*" in _allowed_origins and not _IS_DEV:
+        # Starlette reflects the request Origin (rather than sending "*") when
+        # allow_credentials=True, so a wildcard here accepts every origin.
+        print(
+            "FATAL: CORS_ORIGINS=* is not permitted outside development. "
+            "With allow_credentials=True the middleware reflects any origin. "
+            "List your real origins, e.g. CORS_ORIGINS=https://sap-agent.example.com",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 # ── Startup checks ─────────────────────────────────────────────────────────────
@@ -126,11 +138,28 @@ def _startup_checks() -> None:
             errors.append("JWT_SECRET_KEY must be set in non-development environments.")
         if not os.environ.get("JWT_REFRESH_SECRET"):
             errors.append("JWT_REFRESH_SECRET must be set in non-development environments.")
+        from core.scoping import startup_report, tenancy_model, TENANCY_COLUMN
+        report = startup_report()
+        if report["unenforceable"]:
+            errors.append(
+                f"RECORD_SCOPING=owner but these tables have no owner column and "
+                f"would return all rows: {', '.join(report['unenforceable'])}. "
+                f"Run scripts/add_row_scoping.sql and backfill before enabling."
+            )
+        published = user_store.uses_published_credentials()
+        if published:
+            errors.append(
+                f"These accounts still use passwords published in this repository: "
+                f"{', '.join(published)}. Run scripts/setup_admin.py to set new ones."
+            )
         if errors:
             for e in errors:
                 print(f"FATAL: {e}", file=sys.stderr)
             sys.exit(1)
+        _logger.info("Row-scoping posture: %s", report)
     else:
+        from core.scoping import startup_report as _sr
+        _logger.info("Row-scoping posture: %s", _sr())
         if is_dev_secret():
             _logger.warning(
                 "Running with insecure dev JWT secret. "
@@ -226,8 +255,7 @@ class _ActivityMiddleware(BaseHTTPMiddleware):
                     except Exception:
                         pass
 
-                    client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() \
-                                or (request.client.host if request.client else None)
+                    client_ip = _client_ip(request)
 
                     _write_activity(
                         request_id=rid,
@@ -244,6 +272,27 @@ class _ActivityMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline transport and content hardening on every response (finding F-09).
+
+    HSTS is only meaningful over TLS, so it is emitted outside development where
+    a TLS-terminating proxy is expected.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        if not _IS_DEV:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
+
+
+app.add_middleware(_SecurityHeadersMiddleware)
 app.add_middleware(_ActivityMiddleware)
 
 # ── Rate limiting ──────────────────────────────────────────────────────────────
@@ -251,12 +300,38 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+# Peers whose X-Forwarded-For header we believe. Anything else is spoofable:
+# the header is client-controlled, so trusting it unconditionally let a caller
+# reset the rate-limit counter every request (finding F-08).
+_TRUSTED_PROXIES: frozenset[str] = frozenset(
+    p.strip() for p in os.environ.get("TRUSTED_PROXY_IPS", "").split(",") if p.strip()
+)
+
+
+def _client_ip(request: Request) -> str:
+    """The caller's IP, honouring X-Forwarded-For only from a trusted proxy."""
+    peer = request.client.host if request.client else "unknown"
+    if peer in _TRUSTED_PROXIES:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return peer
+
+
 def _get_rate_limit_key(request: Request) -> str:
-    """Use X-Forwarded-For when behind a reverse proxy; fall back to socket IP."""
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Rate-limit bucket: the authenticated user when known, else the client IP.
+
+    Keying on identity means a shared NAT egress cannot be used to exhaust
+    another tenant's budget, and a single account cannot multiply its budget by
+    rotating headers.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            return f"user:{decode_token(auth[7:])['sub']}"
+        except Exception:
+            pass
+    return f"ip:{_client_ip(request)}"
 
 limiter = Limiter(key_func=_get_rate_limit_key)
 app.state.limiter = limiter
@@ -353,10 +428,13 @@ def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
-    message: str
-    model: str = "llama3.2"
-    session_id: str = "default"
-    clarification_answer: str | None = None
+    # Length caps keep a single request from occupying a worker (finding F-10)
+    # and bound every downstream regex, LLM call and log write.
+    message: str = Field(..., max_length=8000)
+    model: str = Field("llama3.2", max_length=128)
+    session_id: str = Field("default", max_length=200)
+    clarification_answer: str | None = Field(None, max_length=2000)
+    confirm_token: str | None = Field(None, max_length=256)   # confirms a pending write
     ticket_status: str | None = None   # Kutty ticket-backlog status filter (UI dropdown)
 
 class ChatResponse(BaseModel):
@@ -367,13 +445,15 @@ class ChatResponse(BaseModel):
     sap_source: dict | None = None
     request_id: str | None = None
     status: str = "ok"
+    pending_action: dict | None = None   # write awaiting confirmation
+    confirm_token: str | None = None     # replay this to execute the pending action
     report: dict | None = None      # inline chart/table widget payload
     abap_check: dict | None = None  # inline ABAP code review widget payload
     abap_code: dict | None = None   # inline ABAP code generation widget payload
 
 class KuttyAskRequest(BaseModel):
-    query: str
-    k: int = 8
+    query: str = Field(..., max_length=4000)
+    k: int = Field(8, ge=1, le=50)
     status: str | None = None   # optional status filter (open/completed/wip/…)
 
 class KuttyAskResponse(BaseModel):
@@ -382,7 +462,7 @@ class KuttyAskResponse(BaseModel):
     status: str = "ok"
 
 class ResearchRequest(BaseModel):
-    query: str
+    query: str = Field(..., max_length=4000)
 
 class ResearchResponse(BaseModel):
     report: str
@@ -396,7 +476,7 @@ class ResearchResponse(BaseModel):
     success: bool = True
 
 class AutonomousRequest(BaseModel):
-    query: str
+    query: str = Field(..., max_length=4000)
 
 class AutonomousResponse(BaseModel):
     report: str
@@ -497,8 +577,11 @@ def me(current_user: dict = Depends(get_current_user)):
     if not user:
         return current_user
     from auth.rbac import ROLE_MODULES
-    all_modules = sorted({m for modules in ROLE_MODULES.values() for m in modules})
-    return {**user, "allowed_modules": all_modules}
+    # Only this caller's modules. Returning the union of every role's modules
+    # misreports the user's access and becomes an access-control defect the
+    # moment a client uses it for menu gating (finding F-04).
+    my_modules = sorted({m for r in user.get("roles", []) for m in ROLE_MODULES.get(r, [])})
+    return {**user, "allowed_modules": my_modules}
 
 
 @app.get("/auth/users")
@@ -734,25 +817,48 @@ async def chat(
                 abap_check_payload = None
 
     # ── Report / visualization intent ─────────────────────────────────────────
-    from agent.report_agent import is_report_query, generate as gen_report, reply_text as report_reply
+    from agent.report_agent import (is_report_query, generate as gen_report,
+                                    reply_text as report_reply, is_access_denied)
     if is_report_query(body.message):
         try:
-            report_payload = await _aio.to_thread(gen_report, body.message)
+            # The report agent reaches SAP data directly, so it gets the same
+            # allow-list the tool path gets. Without this, asking for a "chart"
+            # bypasses RBAC entirely.
+            report_payload = await _aio.to_thread(
+                gen_report, body.message,
+                get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
+            )
+            if is_access_denied(report_payload):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Access denied: your role does not permit reporting on "
+                           "this data. Contact your SAP administrator to request access.",
+                )
             if report_payload:
                 response_text = report_reply(body.message, report_payload)
                 tool_called   = "report_agent"
+        except HTTPException:
+            raise
         except Exception:
             logger.exception("Report agent failed; falling back to normal chat")
             report_payload = None
 
-    try:
-        if not report_payload and not abap_check_payload and not abap_code_payload:
-            response_text, tool_called, tool_result = await _aio.to_thread(
-                agent.chat,
+    from core.authorization import execution_context
+
+    def _run_agent():
+        # Binds the acting user so execute_tool() can enforce the confirmation
+        # gate on destructive actions, below the model.
+        with execution_context(user_id=user_id, confirm_token=body.confirm_token,
+                               enforce=_AUTH_ENABLED):
+            return agent.chat(
                 body.message,
                 get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
                 body.ticket_status,
             )
+
+    try:
+        if not report_payload and not abap_check_payload and not abap_code_payload:
+            response_text, tool_called, tool_result = await _aio.to_thread(_run_agent)
 
         if tool_called in ("action_plan", "autonomous_agent", "auto_research", "report_agent", "analyze_abap_syntax", "generate_abap_code") and isinstance(tool_result, dict):
             action_plan = tool_result if tool_called == "action_plan" else None
@@ -797,6 +903,13 @@ async def chat(
             status=err_status,
         )
 
+    # ── Field-level masking ─────────────────────────────────────────────────────
+    # Module access grants rows, not every column. Applied before the result is
+    # cached, logged or returned.
+    if _AUTH_ENABLED:
+        from core.authorization import mask_fields
+        tool_result = mask_fields(tool_result, user_roles)
+
     # ── Outbound secret/PII redaction (defense-in-depth) ─────────────────────────
     # The local model's answer is returned to the user verbatim; scrub any secret
     # it may have surfaced (tool data, ticket free-text, prompt-injected content).
@@ -817,8 +930,20 @@ async def chat(
                 report=report_payload,
             )
 
+    # A write that needs confirmation is not an error and not a result — it is a
+    # question back to the user, carrying the token that will execute it.
+    pending_action = None
+    confirm_token  = None
+    if isinstance(tool_result, dict) and tool_result.get("status") == "CONFIRMATION_REQUIRED":
+        pending_action = tool_result.get("pending_action")
+        confirm_token  = tool_result.get("confirm_token")
+        response_text  = tool_result.get("message") or response_text
+        tool_result    = None
+
     _resp = ChatResponse(
         response=response_text,
+        pending_action=pending_action,
+        confirm_token=confirm_token,
         tool_called=tool_called,
         tool_result=tool_result,
         action_plan=action_plan,
@@ -831,7 +956,7 @@ async def chat(
     )
 
     # ── Cache store (only classified-safe, successful, non-clarification) ─────────
-    if err_status == "ok" and not body.clarification_answer:
+    if err_status == "ok" and not body.clarification_answer and not pending_action:
         _cacheable, _ = classify_for_cache(tool_called=tool_called, text=response_text)
         if _cacheable:
             redis_cache.set("chat", user_id, _cache_key, _resp.model_dump())
@@ -864,6 +989,15 @@ async def chat_stream(
         agent.model = body.model
 
     allowed_tools = get_allowed_tools(user_roles) if _AUTH_ENABLED else None
+
+    # Bind the acting user for the whole streamed response so execute_tool() can
+    # enforce the confirmation gate on destructive actions (finding F-03).
+    # Set directly rather than via `with`, because the generator body outlives
+    # this frame; the tokens are reset in the generator's finally block.
+    from core.authorization import _actor, _confirm, _enforce
+    _authz_tokens = (_actor.set(user_id),
+                     _confirm.set(body.confirm_token),
+                     _enforce.set(_AUTH_ENABLED))
 
     async def event_generator():
         import re as _re
@@ -976,12 +1110,23 @@ async def chat_stream(
                     return
 
             # ── Report / visualization intent ─────────────────────────────────
-            from agent.report_agent import is_report_query, generate as gen_report, reply_text as report_reply
+            from agent.report_agent import (is_report_query, generate as gen_report,
+                                            reply_text as report_reply, is_access_denied)
             if is_report_query(body.message):
                 status_steps.append("Generating report and charts...")
                 yield _sse("status", {"step": "Generating report and charts...", "phase": "calling_tool", "tool": "report_agent"})
                 try:
-                    report_payload = await asyncio.to_thread(gen_report, body.message)
+                    # Same allow-list the tool path uses — a "chart" request must
+                    # not reach data the caller's role does not permit.
+                    report_payload = await asyncio.to_thread(
+                        gen_report, body.message, allowed_tools)
+                    if is_access_denied(report_payload):
+                        yield _sse("error", {
+                            "message": "Access denied: your role does not permit "
+                                       "reporting on this data.",
+                            "status_code": 403,
+                        })
+                        return
                     if report_payload:
                         response_text = report_reply(body.message, report_payload)
                         tool_called   = "report_agent"
@@ -1079,6 +1224,13 @@ async def chat_stream(
             yield _sse("error", {"message": "An internal error occurred. Contact your administrator."})
 
         finally:
+            # Release the authorization context bound before the generator ran.
+            try:
+                _actor.reset(_authz_tokens[0])
+                _confirm.reset(_authz_tokens[1])
+                _enforce.reset(_authz_tokens[2])
+            except Exception:
+                pass
             duration_ms = int((time.monotonic() - t_start) * 1000)
             rid = log_request(
                 user_id=user_id,
@@ -1601,14 +1753,45 @@ _MCP_KEYS_FILE = os.path.join(
 )
 
 
+# The MCP SDK dispatches tool calls without access to the HTTP request, so the
+# authenticated identity is carried on a context variable set by
+# _authenticate_mcp_request() and read by the list/call handlers. Tool calls run
+# in the same task as the SSE connection, so the value propagates correctly.
+_mcp_identity: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "mcp_identity", default=None)
+
+
+def _mcp_allowed_tools() -> set[str] | None:
+    """Tools the current MCP identity may call. None means auth is disabled."""
+    if not _AUTH_ENABLED:
+        return None
+    ident = _mcp_identity.get()
+    if ident is None:
+        # No authenticated identity on this context — deny everything.
+        return set()
+    return get_allowed_tools(ident.get("roles", []))
+
+
 def _load_mcp_keys() -> dict:
-    """Load {label: hashed_key} from mcp_keys.json."""
+    """Load {label: {"hash": ..., "roles": [...]}} from mcp_keys.json.
+
+    Records written by older builds are plain {label: hash} strings; those are
+    normalised here and treated as read_only, which grants no SAP tools.
+    """
     if os.path.exists(_MCP_KEYS_FILE):
         try:
             with open(_MCP_KEYS_FILE) as f:
-                return json.load(f)
+                raw = json.load(f)
         except Exception:
-            pass
+            return {}
+        out = {}
+        for label, rec in (raw or {}).items():
+            if isinstance(rec, str):          # legacy: bare hash, no roles
+                out[label] = {"hash": rec, "roles": ["read_only"]}
+            elif isinstance(rec, dict) and rec.get("hash"):
+                out[label] = {"hash": rec["hash"],
+                              "roles": rec.get("roles") or ["read_only"]}
+        return out
     return {}
 
 
@@ -1623,21 +1806,38 @@ def _hash_key(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _validate_mcp_key(raw: str | None) -> bool:
-    """Return True if the raw key matches any stored key or the env-var key."""
+def _resolve_mcp_key(raw: str | None) -> dict | None:
+    """Return {label, roles} for a valid MCP key, or None.
+
+    Keys carry their own roles so an MCP client is bound to the same module
+    allow-list as an interactive user (finding F-01).
+    """
     if not raw:
-        return False
-    # Env-var override (single master key for dev/testing)
+        return None
+    # Env-var override (single master key for dev/testing). Its roles come from
+    # MCP_API_KEY_ROLES so it cannot silently grant more than intended.
     env_key = os.environ.get("MCP_API_KEY", "")
     if env_key and secrets.compare_digest(raw, env_key):
-        return True
-    # File-stored keys (hashed)
+        roles = [r.strip() for r in
+                 os.environ.get("MCP_API_KEY_ROLES", "read_only").split(",") if r.strip()]
+        return {"label": "env", "roles": roles}
     hashed = _hash_key(raw)
-    return hashed in _load_mcp_keys().values()
+    for label, rec in _load_mcp_keys().items():
+        if secrets.compare_digest(hashed, rec["hash"]):
+            return {"label": label, "roles": rec["roles"]}
+    return None
+
+
+def _validate_mcp_key(raw: str | None) -> bool:
+    """Back-compat boolean form of _resolve_mcp_key()."""
+    return _resolve_mcp_key(raw) is not None
 
 
 @_mcp_server.list_tools()
 async def _mcp_list_tools() -> list[_mcp_types.Tool]:
+    # Advertise only what this identity may actually call, so an unprivileged
+    # client cannot even enumerate restricted SAP tools.
+    allowed = _mcp_allowed_tools()
     tools = [
         _mcp_types.Tool(
             name=t["name"],
@@ -1645,7 +1845,10 @@ async def _mcp_list_tools() -> list[_mcp_types.Tool]:
             inputSchema=t["parameters"],
         )
         for t in TOOLS
+        if allowed is None or t["name"] in allowed
     ]
+    if allowed is not None and not allowed:
+        return tools
     tools.append(_mcp_types.Tool(
         name="sap_auto_research",
         description=(
@@ -1665,9 +1868,30 @@ async def _mcp_list_tools() -> list[_mcp_types.Tool]:
 
 @_mcp_server.call_tool()
 async def _mcp_call_tool(name: str, arguments: dict) -> list[_mcp_types.TextContent]:
+    # Authorization is enforced here, before any SAP data is read — the MCP
+    # client is never trusted to respect the tool list it was given (F-01).
+    allowed = _mcp_allowed_tools()
+
+    def _denied(tool: str) -> list[_mcp_types.TextContent]:
+        _logger.info("MCP tool denied by RBAC: %s (identity=%s)",
+                     tool, (_mcp_identity.get() or {}).get("user_id"))
+        return [_mcp_types.TextContent(type="text", text=json.dumps(
+            {"status": "ERROR",
+             "message": f"Access denied: tool '{tool}' is not permitted for your role."},
+            indent=2))]
+
     if name == "sap_auto_research":
+        if allowed is not None and not allowed:
+            return _denied(name)
         query  = (arguments or {}).get("query", "")
-        result = _run_auto_research(query, _execute_tool)
+
+        def _guarded(tool_name: str, params: dict) -> dict:
+            if allowed is not None and tool_name not in allowed:
+                return {"status": "ERROR",
+                        "message": f"Access denied: tool '{tool_name}' not permitted"}
+            return _execute_tool(tool_name, params)
+
+        result = _run_auto_research(query, _guarded)
         output = {
             "report":      result["formatted_report"],
             "anomalies":   result["anomalies"],
@@ -1677,6 +1901,9 @@ async def _mcp_call_tool(name: str, arguments: dict) -> list[_mcp_types.TextCont
             "entity_id":   result["entity_id"],
         }
         return [_mcp_types.TextContent(type="text", text=json.dumps(output, indent=2))]
+
+    if allowed is not None and name not in allowed:
+        return _denied(name)
     result = _execute_tool(name, arguments or {})
     return [_mcp_types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -1740,8 +1967,11 @@ def _authenticate_mcp_request(request: Request) -> dict:
         or request.headers.get("x-mcp-key")
         or request.query_params.get("key")
     )
-    if raw_key and _validate_mcp_key(raw_key):
-        return {"user_id": "api_key_user", "roles": ["read_only"], "auth": "api_key"}
+    if raw_key:
+        key_ident = _resolve_mcp_key(raw_key)
+        if key_ident:
+            return {"user_id": f"mcp_key:{key_ident['label']}",
+                    "roles": key_ident["roles"], "auth": "api_key"}
 
     # ── No valid credentials — return 401 with RFC 9728 WWW-Authenticate ──────
     raise HTTPException(
@@ -1768,19 +1998,29 @@ async def mcp_sse(request: Request):
     On 401, returns WWW-Authenticate with resource_metadata so MCP clients
     (Claude Desktop, Claude.ai) can auto-discover the OAuth flow.
     """
-    _authenticate_mcp_request(request)
-
-    async with _mcp_sse.connect_sse(
-        request.scope, request.receive, request._send
-    ) as streams:
-        await _mcp_server.run(
-            streams[0], streams[1], _mcp_server.create_initialization_options()
-        )
+    identity = _authenticate_mcp_request(request)
+    token = _mcp_identity.set(identity)
+    _logger.info("MCP session opened for %s (roles=%s, auth=%s)",
+                 identity.get("user_id"), identity.get("roles"), identity.get("auth"))
+    try:
+        async with _mcp_sse.connect_sse(
+            request.scope, request.receive, request._send
+        ) as streams:
+            await _mcp_server.run(
+                streams[0], streams[1], _mcp_server.create_initialization_options()
+            )
+    finally:
+        _mcp_identity.reset(token)
 
 
 @app.post("/mcp/messages/")
 async def mcp_messages(request: Request):
-    """Message posting endpoint for SSE transport (called by MCP clients internally)."""
+    """Message posting endpoint for SSE transport (called by MCP clients internally).
+
+    Authenticated for the same reason /mcp/sse is: an unauthenticated caller must
+    not be able to inject messages into someone else's MCP session.
+    """
+    _authenticate_mcp_request(request)
     await _mcp_sse.handle_post_message(request.scope, request.receive, request._send)
 
 
@@ -1788,19 +2028,28 @@ async def mcp_messages(request: Request):
 
 class MCPKeyCreate(BaseModel):
     label: str   # human-readable name, e.g. "alice-laptop", "client-acme"
+    roles: list[str] = ["read_only"]   # SAP modules this key may reach
 
 
 @app.post("/mcp/keys")
 def create_mcp_key(body: MCPKeyCreate, admin: dict = Depends(require_admin)):
-    """Generate a new MCP API key. Returns the raw key once — store it securely."""
+    """Generate a new MCP API key. Returns the raw key once — store it securely.
+
+    The key carries roles, so an MCP client is bound to the same module
+    allow-list as an interactive user.
+    """
+    for r in body.roles:
+        if r not in ALL_ROLES:
+            raise HTTPException(400, f"Unknown role: {r}. Valid roles: {ALL_ROLES}")
     raw    = "mcp_" + secrets.token_hex(24)
     keys   = _load_mcp_keys()
     if body.label in keys:
         raise HTTPException(400, f"Key label '{body.label}' already exists. Delete it first.")
-    keys[body.label] = _hash_key(raw)
+    keys[body.label] = {"hash": _hash_key(raw), "roles": body.roles}
     _save_mcp_keys(keys)
     return {
         "label":   body.label,
+        "roles":   body.roles,
         "key":     raw,
         "warning": "Save this key now — it will not be shown again.",
     }
@@ -1810,7 +2059,8 @@ def create_mcp_key(body: MCPKeyCreate, admin: dict = Depends(require_admin)):
 def list_mcp_keys(admin: dict = Depends(require_admin)):
     """List all active MCP key labels (not the keys themselves)."""
     keys = _load_mcp_keys()
-    return {"keys": list(keys.keys()), "count": len(keys)}
+    return {"keys": [{"label": k, "roles": v["roles"]} for k, v in keys.items()],
+            "count": len(keys)}
 
 
 @app.delete("/mcp/keys/{label}")

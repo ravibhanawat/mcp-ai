@@ -794,6 +794,15 @@ def execute_tool(tool_name: str, parameters: dict) -> dict:
     func = FUNCTION_MAP.get(tool_name)
     if not func:
         return {"status": "ERROR", "message": f"Unknown tool: {tool_name}"}
+
+    # Destructive actions stop here unless explicitly confirmed. This is the one
+    # choke point every caller shares — chat, streaming, reports, MCP, research —
+    # so the control cannot be routed around (finding F-03).
+    from core.authorization import confirmation_required
+    pending = confirmation_required(tool_name, parameters)
+    if pending:
+        return pending
+
     try:
         result = func(**parameters)
         # Inject SAP source attribution into every successful result

@@ -6,6 +6,21 @@ from db.connection import query_one, query_all
 from typing import Any
 
 
+def _envelope(row: dict[str, Any]) -> dict[str, Any]:
+    """Wrap an SAP row in the standard call envelope.
+
+    The row's own `status` column (ACTIVE, PAID, OPEN…) is moved to `sap_status`
+    so it cannot overwrite the OK/ERROR call status that every caller branches on
+    (finding F-05). Sixteen tables in this schema carry a `status` column.
+    """
+    out = dict(row)
+    if "status" in out:
+        out["sap_status"] = out.pop("status")
+    out["status"] = "OK"
+    return out
+
+
+
 def get_material_info(material_id: str) -> dict[str, Any]:
     """BAPI_MATERIAL_GET_DETAIL - Get material master data"""
     mat = query_one(
@@ -15,7 +30,7 @@ def get_material_info(material_id: str) -> dict[str, Any]:
     if not mat:
         return {"status": "ERROR", "message": f"Material {material_id} not found"}
     mat.pop("created_at", None)
-    return {"status": "OK", **mat}
+    return _envelope(mat)
 
 
 def get_stock_level(material_id: str, plant: str = None) -> dict[str, Any]:

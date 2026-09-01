@@ -47,11 +47,42 @@ def validate_password(password: str) -> None:
 # ── Account lockout ───────────────────────────────────────────────────────────
 _MAX_FAILURES  = 5          # failed attempts before lockout
 _LOCKOUT_SECS  = 900        # 15 minutes
+
+# Lockout state lives in Redis when it is configured, so a lock holds across all
+# gunicorn workers and survives a restart. With N workers and per-process state
+# an attacker previously got 5xN attempts, and any restart cleared every lock
+# (finding F-07). The in-process dicts remain as a single-worker fallback.
 _fail_counts:  dict[str, int]   = {}   # user_id → failed attempt count
 _locked_until: dict[str, float] = {}   # user_id → unlock timestamp
 
 
+def _shared():
+    """Return the Redis client if shared lockout is available, else None."""
+    try:
+        from core import redis_cache
+        if redis_cache.is_enabled():
+            return redis_cache._client
+    except Exception:
+        pass
+    return None
+
+
 def _record_failure(user_id: str) -> None:
+    r = _shared()
+    if r is not None:
+        try:
+            n = r.incr(f"authlock:fail:{user_id}")
+            r.expire(f"authlock:fail:{user_id}", _LOCKOUT_SECS)
+            if n >= _MAX_FAILURES:
+                r.setex(f"authlock:locked:{user_id}", _LOCKOUT_SECS, "1")
+                print(
+                    f"WARNING: Account '{user_id}' locked after {_MAX_FAILURES} failed "
+                    f"attempts for {_LOCKOUT_SECS // 60} minutes.",
+                    file=sys.stderr,
+                )
+            return
+        except Exception:
+            pass   # fall through to in-process counters
     _fail_counts[user_id] = _fail_counts.get(user_id, 0) + 1
     if _fail_counts[user_id] >= _MAX_FAILURES:
         _locked_until[user_id] = time.monotonic() + _LOCKOUT_SECS
@@ -63,11 +94,24 @@ def _record_failure(user_id: str) -> None:
 
 
 def _clear_failure(user_id: str) -> None:
+    r = _shared()
+    if r is not None:
+        try:
+            r.delete(f"authlock:fail:{user_id}", f"authlock:locked:{user_id}")
+        except Exception:
+            pass
     _fail_counts.pop(user_id, None)
     _locked_until.pop(user_id, None)
 
 
 def _is_locked(user_id: str) -> bool:
+    r = _shared()
+    if r is not None:
+        try:
+            if r.get(f"authlock:locked:{user_id}"):
+                return True
+        except Exception:
+            pass
     unlock_at = _locked_until.get(user_id, 0)
     if unlock_at and time.monotonic() < unlock_at:
         return True
@@ -86,8 +130,8 @@ _DEFAULT_USERS = [
         "email":             "admin@company.com",
         "roles":             ["admin"],
         "active":            True,
-        "password_hash":     "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
-        "must_set_password": False,
+        "password_hash":     None,
+        "must_set_password": True,
     },
     {
         "user_id":           "fi_user",
@@ -95,8 +139,8 @@ _DEFAULT_USERS = [
         "email":             "finance@company.com",
         "roles":             ["fi_co_analyst"],
         "active":            True,
-        "password_hash":     "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
-        "must_set_password": False,
+        "password_hash":     None,
+        "must_set_password": True,
     },
     {
         "user_id":           "hr_user",
@@ -104,8 +148,8 @@ _DEFAULT_USERS = [
         "email":             "hr@company.com",
         "roles":             ["hr_manager"],
         "active":            True,
-        "password_hash":     "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
-        "must_set_password": False,
+        "password_hash":     None,
+        "must_set_password": True,
     },
     {
         "user_id":           "demo",
@@ -113,10 +157,20 @@ _DEFAULT_USERS = [
         "email":             "demo@company.com",
         "roles":             ["read_only"],
         "active":            True,
-        "password_hash":     "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
-        "must_set_password": False,
+        "password_hash":     None,
+        "must_set_password": True,
     },
 ]
+
+# bcrypt hashes that shipped in earlier builds of this repo and were published in
+# README.md, users.json.example and the frontend bundle. Any account still using
+# one is treated as unset: the credentials are public, so they are not a secret.
+_PUBLISHED_HASHES: frozenset[str] = frozenset({
+    "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
+    "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
+    "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
+    "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
+})
 
 
 # ── Password hashing (bcrypt) ─────────────────────────────────────────────────
@@ -162,16 +216,23 @@ def _init_defaults() -> None:
     os.chmod(_USERS_FILE, stat.S_IRUSR | stat.S_IWUSR)
     print(
         "WARNING: users.json initialised with default accounts but NO passwords. "
-        "Use POST /auth/users or update_password() to set passwords before use.",
+        "Run scripts/setup_admin.py (or POST /auth/users as an admin) to set "
+        "passwords before anyone can log in.",
         file=sys.stderr,
     )
 
 
 def _migrate_legacy(users: dict[str, dict]) -> None:
     """
-    Detect SHA-256 records (identified by a 'salt' key) and invalidate them
-    so users are forced to reset their passwords via the admin API.
-    This is a one-time migration when upgrading from the old SHA-256 scheme.
+    Invalidate credentials that can no longer be trusted, forcing a reset:
+
+    1. SHA-256 era records (identified by a 'salt' key).
+    2. Any account still using a bcrypt hash that was published in this repo.
+
+    Earlier builds re-seeded the default accounts here whenever their passwords
+    were cleared, which made the published credentials impossible to revoke.
+    That behaviour is deliberately gone: an account with no usable password
+    stays locked until an administrator sets one (scripts/setup_admin.py).
     """
     changed = False
     for user in users.values():
@@ -180,29 +241,33 @@ def _migrate_legacy(users: dict[str, dict]) -> None:
             user["password_hash"] = None
             user["must_set_password"] = True
             changed = True
-
-    # Self-healing: if any default demo user has no password set or is flagged to reset,
-    # set their password to the documented default so login works out-of-the-box.
-    default_hashes = {
-        "admin": "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
-        "fi_user": "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
-        "hr_user": "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
-        "demo": "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
-    }
-    for uid, default_hash in default_hashes.items():
-        if uid in users:
-            u = users[uid]
-            if u.get("password_hash") is None or u.get("must_set_password", True):
-                u["password_hash"] = default_hash
-                u["must_set_password"] = False
-                changed = True
+        elif user.get("password_hash") in _PUBLISHED_HASHES:
+            print(
+                f"WARNING: account '{user['user_id']}' was using a password published "
+                f"in this repository. It has been revoked — run "
+                f"scripts/setup_admin.py to set a new one.",
+                file=sys.stderr,
+            )
+            user["password_hash"] = None
+            user["must_set_password"] = True
+            changed = True
 
     if changed:
         _save(users)
-        print(
-            "INFO: Legacy/null password records migrated and remedied.",
-            file=sys.stderr,
-        )
+
+
+def uses_published_credentials() -> list[str]:
+    """Return the ids of accounts still using a password published in this repo.
+
+    Called at startup so a production deployment refuses to run with them.
+    """
+    try:
+        with open(_USERS_FILE, encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return []
+    return [u["user_id"] for u in raw
+            if u.get("password_hash") in _PUBLISHED_HASHES]
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

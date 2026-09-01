@@ -1,0 +1,12 @@
+--- a/crates/orchestrator/src/prompt.rs
++++ b/crates/orchestrator/src/prompt.rs
+@@ -75,6 +75,9 @@
+ 23. Add a GROUP BY dimension ONLY when the user NAMES one (\"by customer\", \"per material\", \"by month\", \"by sales org\", \"top N <dimension>\") or explicitly asks for a row-level listing/detail. If the question asks for a SINGLE overall figure or a comparison of totals (e.g. \"total revenue\", \"compare revenue this year vs last year\", \"revenue YTD vs last year\", \"how much did we sell\", \"net GST payable\") and names NO dimension, return ONE aggregated row — do NOT add a GROUP BY and do NOT invent a breakdown column (customer / material / region / etc.). A comparison of two periods is still ONE row with two measures (e.g. `SUM(CASE WHEN <period A> ...)` and `SUM(CASE WHEN <period B> ...)`) plus a growth column; never split it by an unrequested dimension.
+ 24. Add `LIMIT n` ONLY for an explicit top-/bottom-N ranking (\"top 10\", \"largest 20\", \"worst 5\") or to cap a long row-level detail listing. NEVER attach a LIMIT to a single-row aggregate, a total, or a total-vs-total / period-vs-period comparison — those return all their (few) rows. When the user does name a ranking count, use exactly that N.
+ 
++KNOWN DATA GAPS (do not invent columns or joins to work around these):
++25. There is NO employee/sales-rep name table anywhere in the schema. `personnel_no` (e.g. on a sales-document partner row where the partner function identifies a sales employee) is the ONLY identifier available for a salesperson — there is no table or column anywhere that maps it to a human name. If asked for a sales rep, sales employee, or sales manager BY NAME, or to rank/compare them, SELECT and group by `personnel_no` and state plainly in the explanation that employee names are not available in the current data — do NOT invent a join to a names/employee/HR table.
++
+ WHEN TO ASK FOR CLARIFICATION:
+ - The question is ambiguous in a way that affects the SQL (e.g. \"recent\" — last 7/30/90 days?, multiple tables match equally well, an aggregation type isn't specified).
+ - DO NOT clarify if you can make a sensible default — be helpful first.

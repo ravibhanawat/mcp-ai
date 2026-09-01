@@ -1,0 +1,37 @@
+--- a/mdl.json
++++ b/mdl.json
+@@ -7506,12 +7506,24 @@
+           "description": "Vendor name (LFA1.NAME1)"
+         },
+         {
++          "name": "vendor_group",
++          "type": "VARCHAR",
++          "expression": "vendor_group",
++          "description": "Vendor account group (LFA1.KTOKK) — classifies vendor type (e.g. domestic vs import, one-time vendor). Use for \"vendor group/category\" questions."
++        },
++        {
+           "name": "country",
+           "type": "VARCHAR",
+           "expression": "country",
+           "description": "Country key (LAND1) — IN=India"
+         },
+         {
++          "name": "region",
++          "type": "VARCHAR",
++          "expression": "region",
++          "description": "State/region code (LFA1.REGIO) — Indian state for domestic vendors, used for GST place-of-supply and state-wise vendor questions."
++        },
++        {
+           "name": "city",
+           "type": "VARCHAR",
+           "expression": "city",
+@@ -7556,7 +7568,8 @@
+           "Vendor List (SAP MKVZ)",
+           "Vendor Display (SAP XK03)",
+           "Vendor master details for vendor 0000100753 — name, city and country",
+-          "Show the address (city and country) of vendor 0000100753"
++          "Show the address (city and country) of vendor 0000100753",
++          "What account group and state is vendor 0000100753 in?"
+         ]
+       }
+     },

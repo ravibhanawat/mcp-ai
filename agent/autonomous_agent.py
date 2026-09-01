@@ -33,10 +33,10 @@ At each step you see:
 
 You must output EXACTLY ONE of:
 A) A tool call JSON to gather more data:
-   {"action": "call_tool", "tool": "TOOL_NAME", "parameters": {"PARAM": "VALUE"}, "reasoning": "why this tool next"}
+   {{"action": "call_tool", "tool": "TOOL_NAME", "parameters": {{"PARAM": "VALUE"}}, "reasoning": "why this tool next"}}
 
 B) A completion signal when you have enough data:
-   {"action": "complete", "reasoning": "why research is complete"}
+   {{"action": "complete", "reasoning": "why research is complete"}}
 
 RULES:
 - Never call the same tool twice with the same parameters

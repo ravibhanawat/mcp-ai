@@ -1,0 +1,21 @@
+--- a/mv.sql
++++ b/mv.sql
+@@ -2424,7 +2424,7 @@
+      ON mk.tenant_id=s.tenant_id AND mk.MATNR=s.MATNR AND mk.SPRAS='E';;
+ 
+ -- mv_x_vendor_360
+-CREATE MATERIALIZED VIEW `mv_x_vendor_360` (`tenant_id`, `vendor`, `vendor_name`, `country`, `city`, `po_net_value`, `po_count`, `gr_value`)
++CREATE MATERIALIZED VIEW `mv_x_vendor_360` (`tenant_id`, `vendor`, `vendor_name`, `vendor_group`, `country`, `region`, `city`, `po_net_value`, `po_count`, `gr_value`)
+ COMMENT "MATERIALIZED_VIEW"
+ DISTRIBUTED BY HASH(`tenant_id`, `vendor`) BUCKETS 16 
+ REFRESH ASYNC EVERY(INTERVAL 6 HOUR)
+@@ -2438,7 +2438,9 @@
+     l.tenant_id,
+     l.LIFNR                                    AS vendor,
+     l.NAME1                                   AS vendor_name,
++    l.KTOKK                                    AS vendor_group,
+     l.LAND1                                    AS country,
++    l.REGIO                                    AS region,
+     l.ORT01                                    AS city,
+     COALESCE(po.po_net, 0)                     AS po_net_value,
+     COALESCE(po.po_count, 0)                   AS po_count,

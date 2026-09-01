@@ -2005,12 +2005,12 @@ function ClavisMark({ size = 42, variant = 'light' }) {
   )
 }
 
-const LG_DEMO_ACCOUNTS = [
-  ['admin', 'SapAdmin@2026!'],
-  ['fi_user', 'Finance@123'],
-  ['hr_user', 'HR@123'],
-  ['demo', 'demo'],
-]
+// User-id quick-fill for local development only. Never carries passwords:
+// anything in this file is compiled into the production bundle and readable by
+// every visitor. import.meta.env.DEV is false in `vite build`, so the list and
+// the block that renders it are dropped from the shipped asset.
+const LG_DEV_BUILD = import.meta.env.DEV
+const LG_DEMO_USER_IDS = LG_DEV_BUILD ? ['admin', 'fi_user', 'hr_user', 'demo'] : []
 
 // Builds a CSS box-shadow string of randomly-placed stars across a 2000x2000 field.
 // Paired with a ::after duplicate offset 2000px down so the upward drift loops seamlessly.
@@ -2276,16 +2276,18 @@ function LoginScreen({ onLogin, theme = 'light' }) {
             </button>
           </form>
 
-          <div className="lg-demo2">
-            <div className="lg-demo-label2">Demo accounts</div>
-            <div className="lg-demo-row">
-              {LG_DEMO_ACCOUNTS.map(([u, p]) => (
-                <button key={u} className="lg-chip2" type="button" onClick={() => { setUserId(u); setPassword(p) }}>
-                  {u}
-                </button>
-              ))}
+          {LG_DEV_BUILD && (
+            <div className="lg-demo2">
+              <div className="lg-demo-label2">Dev quick-fill (user id only)</div>
+              <div className="lg-demo-row">
+                {LG_DEMO_USER_IDS.map(u => (
+                  <button key={u} className="lg-chip2" type="button" onClick={() => setUserId(u)}>
+                    {u}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </main>
 
         <div className="lg-foot2">© KUTTY 2026 · Secure access via CLAVIS</div>

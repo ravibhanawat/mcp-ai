@@ -6,6 +6,21 @@ from db.connection import query_one, query_all
 from typing import Any
 
 
+def _envelope(row: dict[str, Any]) -> dict[str, Any]:
+    """Wrap an SAP row in the standard call envelope.
+
+    The row's own `status` column (ACTIVE, PAID, OPEN…) is moved to `sap_status`
+    so it cannot overwrite the OK/ERROR call status that every caller branches on
+    (finding F-05). Sixteen tables in this schema carry a `status` column.
+    """
+    out = dict(row)
+    if "status" in out:
+        out["sap_status"] = out.pop("status")
+    out["status"] = "OK"
+    return out
+
+
+
 def get_vendor_info(vendor_id: str) -> dict[str, Any]:
     """BAPI_VENDOR_GETDETAIL - Get vendor master data"""
     row = query_one(
@@ -15,7 +30,7 @@ def get_vendor_info(vendor_id: str) -> dict[str, Any]:
     if not row:
         return {"status": "ERROR", "message": f"Vendor {vendor_id} not found"}
     row.pop("created_at", None)
-    return {"status": "OK", **row}
+    return _envelope(row)
 
 
 def get_invoice_status(invoice_id: str) -> dict[str, Any]:
@@ -32,7 +47,7 @@ def get_invoice_status(invoice_id: str) -> dict[str, Any]:
     if not row:
         return {"status": "ERROR", "message": f"Invoice {invoice_id} not found"}
     row.pop("created_at", None)
-    return {"status": "OK", **row}
+    return _envelope(row)
 
 
 def get_open_invoices(vendor_id: str = None) -> dict[str, Any]:
@@ -96,7 +111,7 @@ def get_gl_account_balance(gl_account: str) -> dict[str, Any]:
     if not acc:
         return {"status": "ERROR", "message": f"GL Account {gl_account} not found"}
     acc.pop("created_at", None)
-    return {"status": "OK", **acc}
+    return _envelope(acc)
 
 
 def list_all_cost_centers() -> dict[str, Any]:

@@ -49,9 +49,14 @@ def _conninfo() -> str:
     user     = os.environ.get("DB_USER",     "sap_agent")
     password = os.environ.get("DB_PASSWORD", "")
     database = os.environ.get("DB_NAME",     "sap_agent")
+    # libpq defaults to sslmode=prefer, which silently falls back to plaintext.
+    # Pin it explicitly; DB_SSLMODE=require is the default outside development
+    # (finding F-09).
+    default_mode = "prefer" if os.environ.get("APP_ENV", "development").lower() == "development" else "require"
+    sslmode = os.environ.get("DB_SSLMODE", default_mode)
     return (
         f"host={host} port={port} dbname={database} "
-        f"user={user} password={password} connect_timeout=10"
+        f"user={user} password={password} connect_timeout=10 sslmode={sslmode}"
     )
 
 

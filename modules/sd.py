@@ -9,6 +9,21 @@ import string
 from datetime import datetime, timedelta
 
 
+def _envelope(row: dict[str, Any]) -> dict[str, Any]:
+    """Wrap an SAP row in the standard call envelope.
+
+    The row's own `status` column (ACTIVE, PAID, OPEN…) is moved to `sap_status`
+    so it cannot overwrite the OK/ERROR call status that every caller branches on
+    (finding F-05). Sixteen tables in this schema carry a `status` column.
+    """
+    out = dict(row)
+    if "status" in out:
+        out["sap_status"] = out.pop("status")
+    out["status"] = "OK"
+    return out
+
+
+
 def get_customer_info(customer_id: str) -> dict[str, Any]:
     """BAPI_CUSTOMER_GETDETAIL - Get customer master data"""
     cust = query_one(
@@ -18,7 +33,7 @@ def get_customer_info(customer_id: str) -> dict[str, Any]:
     if not cust:
         return {"status": "ERROR", "message": f"Customer {customer_id} not found"}
     cust.pop("created_at", None)
-    return {"status": "OK", **cust}
+    return _envelope(cust)
 
 
 def get_sales_order(order_id: str) -> dict[str, Any]:

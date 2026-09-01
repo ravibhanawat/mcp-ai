@@ -202,19 +202,23 @@ class LLMReportAgent:
 
     # ── Public entry point ────────────────────────────────────────────────────
 
-    def generate(self, query: str) -> dict[str, Any] | None:
+    def generate(self, query: str,
+                 allowed_tools: set[str] | None = None) -> dict[str, Any] | None:
         """
         Main entry point. Returns a ReportPayload dict or None on failure.
         Always tries LLM path first; falls back to hardcoded path on error.
+
+        `allowed_tools` is the caller's RBAC allow-list; both paths honour it.
+        Pass None only when authentication is disabled.
         """
         try:
-            payload = self._llm_generate(query)
+            payload = self._llm_generate(query, allowed_tools)
             if payload and "error" not in payload:
                 return payload
         except Exception:
             _logger.warning("LLM report path failed — using hardcoded fallback", exc_info=True)
 
-        return _hardcoded_generate(query)
+        return _hardcoded_generate(query, allowed_tools)
 
     # ── Pass 1: Planner ───────────────────────────────────────────────────────
 
@@ -252,8 +256,13 @@ class LLMReportAgent:
 
     # ── Tool executor ─────────────────────────────────────────────────────────
 
-    def _execute_plan(self, steps: list[dict]) -> dict[str, Any]:
-        """Execute each planned tool call and collect results."""
+    def _execute_plan(self, steps: list[dict],
+                      allowed_tools: set[str] | None = None) -> dict[str, Any]:
+        """Execute each planned tool call and collect results.
+
+        Tools outside the caller's allow-list are never executed: the planner is
+        LLM-driven, so it must not be able to widen the caller's permissions.
+        """
         from tools.tool_registry import execute_tool
 
         collected: dict[str, Any] = {}
@@ -268,6 +277,17 @@ class LLMReportAgent:
                 _logger.debug("Skipping duplicate tool call: %s", call_key)
                 continue
             called.add(call_key)
+
+            if allowed_tools is not None and tool_name not in allowed_tools:
+                _logger.info("Report tool denied by RBAC: %s", tool_name)
+                collected[call_key] = {
+                    "tool":       tool_name,
+                    "parameters": parameters,
+                    "result":     {"status": "ERROR",
+                                   "message": f"Access denied: tool '{tool_name}' "
+                                              f"not permitted for your role"},
+                }
+                continue
 
             try:
                 result = execute_tool(tool_name, parameters)
@@ -290,7 +310,8 @@ class LLMReportAgent:
 
     # ── Full LLM pipeline ─────────────────────────────────────────────────────
 
-    def _llm_generate(self, query: str) -> dict[str, Any] | None:
+    def _llm_generate(self, query: str,
+                      allowed_tools: set[str] | None = None) -> dict[str, Any] | None:
         # Step 1: Plan
         plan = self._plan(query)
         if not plan or not plan.get("steps"):
@@ -304,7 +325,7 @@ class LLMReportAgent:
                      chart_type, [s.get("tool") for s in steps], aggregation)
 
         # Step 2: Execute tools
-        collected = self._execute_plan(steps)
+        collected = self._execute_plan(steps, allowed_tools)
         if not collected:
             _logger.warning("No tool results collected for: %s", query)
             return None
@@ -651,6 +672,38 @@ def _fetch_pp_capacity() -> dict[str, Any]:
     }
 
 
+# Sentinel returned when the caller's role does not permit the requested data.
+ACCESS_DENIED: dict[str, Any] = {"error": "access_denied"}
+
+# ─── RBAC: which SAP module each report data source reads from ───────────────
+# The report agent reaches SAP data directly, so it must apply the same module
+# allow-list the chat tool path applies. Without this an unprivileged user can
+# retrieve any module's data simply by asking for a "chart" (finding F-12).
+_DATA_SOURCE_MODULE: dict[str, str] = {
+    "fi_co_invoices": "fi_co",
+    "fi_co_budget":   "fi_co",
+    "mm_reorder":     "mm",
+    "mm_pos":         "mm",
+    "mm_materials":   "mm",
+    "sd_orders":      "sd",
+    "hr_headcount":   "hr",
+    "pp_orders":      "pp",
+    "pp_capacity":    "pp",
+}
+
+
+def _module_allowed(module: str, allowed_tools: set[str] | None) -> bool:
+    """True if the caller's tool allow-list grants any tool in `module`.
+
+    allowed_tools is None only when authentication is disabled (dev mode),
+    matching the convention used by SAPAgent.auto_research().
+    """
+    if allowed_tools is None:
+        return True
+    from auth.rbac import MODULE_TOOLS
+    return bool(set(MODULE_TOOLS.get(module, ())) & set(allowed_tools))
+
+
 _HARDCODED_FETCHERS = {
     "fi_co_invoices": _fetch_fi_co_invoices,
     "fi_co_budget":   _fetch_fi_co_budget,
@@ -696,10 +749,21 @@ def build_payload(chart_type: str, raw: dict) -> dict[str, Any]:
 
 # ─── Hardcoded fallback path ──────────────────────────────────────────────────
 
-def _hardcoded_generate(query: str) -> dict[str, Any] | None:
-    """Original keyword-driven path. Used as fallback when LLM is unavailable."""
+def _hardcoded_generate(query: str,
+                        allowed_tools: set[str] | None = None) -> dict[str, Any] | None:
+    """Original keyword-driven path. Used as fallback when LLM is unavailable.
+
+    Returns ACCESS_DENIED when the caller's role does not grant the module the
+    detected data source reads from.
+    """
     chart_type  = _detect_chart_type(query)
     data_source = _detect_data_source(query)
+
+    required_module = _DATA_SOURCE_MODULE.get(data_source)
+    if required_module and not _module_allowed(required_module, allowed_tools):
+        _logger.info("Report denied by RBAC: data_source=%s module=%s",
+                     data_source, required_module)
+        return ACCESS_DENIED
 
     # Specific employee ID → individual data chart
     emp_match = _EMP_ID_RE.search(query)
@@ -748,13 +812,24 @@ def _get_agent() -> LLMReportAgent:
 
 # ─── Public API (unchanged surface for api/server.py) ────────────────────────
 
-def generate(query: str) -> dict[str, Any] | None:
+def generate(query: str,
+             allowed_tools: set[str] | None = None) -> dict[str, Any] | None:
     """
     Main entry point called by api/server.py.
     Tries LLM-driven generation first; falls back to hardcoded path.
-    Returns a ReportPayload dict or None on complete failure.
+
+    `allowed_tools` is the caller's RBAC allow-list and MUST be supplied by any
+    authenticated caller — the report agent reaches SAP data directly, so it is
+    the only thing standing between an unprivileged user and another module's
+    data. Returns ACCESS_DENIED if the role does not permit the requested data,
+    a ReportPayload dict on success, or None if no report could be built.
     """
-    return _get_agent().generate(query)
+    return _get_agent().generate(query, allowed_tools)
+
+
+def is_access_denied(payload: dict[str, Any] | None) -> bool:
+    """True if `payload` is the RBAC denial sentinel returned by generate()."""
+    return isinstance(payload, dict) and payload.get("error") == "access_denied"
 
 
 def reply_text(query: str, payload: dict[str, Any]) -> str:

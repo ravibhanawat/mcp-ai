@@ -7,8 +7,8 @@
       "admin"
     ],
     "active": true,
-    "password_hash": "$2b$12$LQxBhJlGrVIopGaBE08dh.GDef10eK/nU2PF4xXhxibj9ggR7XPye",
-    "must_set_password": false
+    "password_hash": null,
+    "must_set_password": true
   },
   {
     "user_id": "fi_user",
@@ -18,8 +18,8 @@
       "fi_co_analyst"
     ],
     "active": true,
-    "password_hash": "$2b$12$UFlBUwnF0y.sKkoPame3AuyJveVghctXc2OPQ1xsLcfcU2hNCj6vi",
-    "must_set_password": false
+    "password_hash": null,
+    "must_set_password": true
   },
   {
     "user_id": "hr_user",
@@ -29,8 +29,8 @@
       "hr_manager"
     ],
     "active": true,
-    "password_hash": "$2b$12$6KlFqMOhjzy9F/NalnQbs.MH6lGPoqzp3CSL3WARVbRwyyQAxYice",
-    "must_set_password": false
+    "password_hash": null,
+    "must_set_password": true
   },
   {
     "user_id": "demo",
@@ -40,7 +40,7 @@
       "read_only"
     ],
     "active": true,
-    "password_hash": "$2b$12$8hI2np0FSq2PoAWuy2XZqONml7Rgt4oD8eNxrKN8j54fc2AjYHLXK",
-    "must_set_password": false
+    "password_hash": null,
+    "must_set_password": true
   }
 ]

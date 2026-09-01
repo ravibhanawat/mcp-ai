@@ -9,15 +9,15 @@ Each role maps to specific SAP modules.
 # "tickets" = the Kutty ticket-backlog RAG search (cross-module delivery data),
 # granted to every data role; read_only stays general-questions-only.
 ROLE_MODULES: dict[str, list[str]] = {
-    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap", "receipt", "tickets"],
-    "fi_co_analyst":  ["fi_co", "tickets"],
-    "mm_analyst":     ["mm", "tickets"],
-    "sd_analyst":     ["sd", "tickets"],
-    "hr_manager":     ["hr", "tickets"],
-    "pp_planner":     ["pp", "tickets"],
-    "abap_developer": ["abap", "tickets"],
-    "re_analyst":     ["sd", "fi_co", "receipt", "fi_co_re", "tickets"],   # Alembic RE sales team
-    "read_only":      [],   # general questions only, no SAP data
+    "admin":          ["fi_co", "mm", "sd", "hr", "pp", "abap", "receipt", "tickets", "docs"],
+    "fi_co_analyst":  ["fi_co", "tickets", "docs"],
+    "mm_analyst":     ["mm", "tickets", "docs"],
+    "sd_analyst":     ["sd", "tickets", "docs"],
+    "hr_manager":     ["hr", "tickets", "docs"],
+    "pp_planner":     ["pp", "tickets", "docs"],
+    "abap_developer": ["abap", "tickets", "docs"],
+    "re_analyst":     ["sd", "fi_co", "receipt", "fi_co_re", "tickets", "docs"],   # Alembic RE sales team
+    "read_only":      ["docs"],   # SAP documentation only, no customer data
 }
 
 ALL_ROLES = list(ROLE_MODULES.keys())
@@ -90,6 +90,12 @@ MODULE_TOOLS: dict[str, list[str]] = {
     "tickets": [
         "search_sap_tickets",
     ],
+    # Built-in SAP documentation lookup. Reads no customer data, so every role
+    # including read_only may use it — but it is mapped rather than left
+    # ungoverned, so the registry and the RBAC map cannot drift (finding F-11).
+    "docs": [
+        "search_sap_docs",
+    ],
 }
 
 # Reverse map: tool → module
@@ -101,12 +107,17 @@ _TOOL_MODULE: dict[str, str] = {
 
 
 def get_allowed_tools(roles: list[str]) -> set[str]:
-    """Return the set of tool names the given roles may call."""
+    """Return the set of tool names the given roles may call.
+
+    Module grant AND operation grant: holding a module no longer implies the
+    right to write in it (finding F-03).
+    """
+    from core.authorization import filter_by_operation
     allowed: set[str] = set()
     for role in roles:
         for mod in ROLE_MODULES.get(role, []):
             allowed.update(MODULE_TOOLS.get(mod, []))
-    return allowed
+    return filter_by_operation(allowed, roles)
 
 
 def check_tool_access(tool_name: str, roles: list[str]) -> bool:

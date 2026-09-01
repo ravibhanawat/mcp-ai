@@ -244,7 +244,8 @@ r = requests.get(url, auth=('user', 'pass'))
 ## License
 
 MIT — see [LICENSE](LICENSE)
-SapAdmin@2026!
+First run: `python scripts/setup_admin.py` to set passwords for the default
+accounts. They ship with no password and cannot be used until you do.
 source .venv/bin/activate && bash scripts/start_dev.sh
 
  ollama create kutty -f training/kutty/Modelfile.

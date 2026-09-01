@@ -227,6 +227,10 @@ def get_stats(*, from_ts: str | None = None, to_ts: str | None = None) -> dict[s
     try:
         from db.connection import get_db
         where, params = _build_where(from_ts=from_ts, to_ts=to_ts)
+        where_tool, params_tool = _build_where("tool_called IS NOT NULL",
+                                               from_ts=from_ts, to_ts=to_ts)
+        where_err,  params_err  = _build_where("status = 'error'",
+                                               from_ts=from_ts, to_ts=to_ts)
         with get_db() as conn:
             cur = conn.cursor(row_factory=dict_row)
 
@@ -266,10 +270,9 @@ def get_stats(*, from_ts: str | None = None, to_ts: str | None = None) -> dict[s
             # Tool usage
             cur.execute(
                 f"SELECT tool_called, COUNT(*) AS total "
-                f"FROM request_logs {where} "
-                f"WHERE tool_called IS NOT NULL "
+                f"FROM request_logs {where_tool} "
                 f"GROUP BY tool_called ORDER BY total DESC LIMIT 30",
-                params,
+                params_tool,
             )
             by_tool = [dict(r) for r in cur.fetchall()]
 
@@ -277,10 +280,9 @@ def get_stats(*, from_ts: str | None = None, to_ts: str | None = None) -> dict[s
             cur.execute(
                 f"SELECT endpoint, status_code, COUNT(*) AS count, "
                 f"LEFT(error_message, 120) AS sample_error "
-                f"FROM request_logs {where} "
-                f"WHERE status = 'error' "
+                f"FROM request_logs {where_err} "
                 f"GROUP BY endpoint, status_code, sample_error ORDER BY count DESC LIMIT 20",
-                params,
+                params_err,
             )
             errors = [dict(r) for r in cur.fetchall()]
 
@@ -310,7 +312,7 @@ def get_stats(*, from_ts: str | None = None, to_ts: str | None = None) -> dict[s
             "hourly":      hourly,
         }
     except Exception as exc:
-        _logger.debug("activity_log.get_stats failed: %s", exc)
+        _logger.exception("activity_log.get_stats failed: %s", exc)
         return {"summary": {}, "by_endpoint": [], "by_user": [], "by_tool": [], "errors": [], "hourly": []}
 
 
@@ -414,8 +416,14 @@ def run_migrations() -> None:
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-def _build_where(**filters) -> tuple[str, list]:
-    clauses, params = [], []
+def _build_where(*extra: str, **filters) -> tuple[str, list]:
+    """Build a single WHERE clause.
+
+    `extra` holds parameter-free predicates (e.g. "tool_called IS NOT NULL") that
+    callers used to append as a second WHERE, which produced invalid SQL whenever
+    a filter was also present (finding F-06).
+    """
+    clauses, params = list(extra), []
     if filters.get("user_id"):
         clauses.append("user_id = %s"); params.append(filters["user_id"])
     if filters.get("endpoint"):

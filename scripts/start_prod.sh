@@ -16,6 +16,9 @@ PORT="${PORT:-8000}"
 HOST="${HOST:-0.0.0.0}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-120}"       # seconds before a slow worker is killed
+# Peers whose X-Forwarded-For we believe. Never "*": the header is client-set,
+# so trusting every peer lets a caller forge its own source IP.
+TRUSTED_PROXY_IPS="${TRUSTED_PROXY_IPS:-127.0.0.1}"
 KEEPALIVE="${KEEPALIVE:-75}"                  # keep-alive for SSE connections (seconds)
 MAX_REQUESTS="${MAX_REQUESTS:-10000}"         # recycle each worker after N requests
 MAX_REQUESTS_JITTER="${MAX_REQUESTS_JITTER:-1000}"  # prevent thundering-herd on recycle
@@ -34,4 +37,4 @@ exec gunicorn api.server:app \
   --log-level "$LOG_LEVEL" \
   --access-logfile - \
   --error-logfile - \
-  --forwarded-allow-ips "*"
+  --forwarded-allow-ips "$TRUSTED_PROXY_IPS"

@@ -687,9 +687,18 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
     def _call_cloud_primary(self, messages: list[dict]) -> str | None:
         """
         Attempt a cloud LLM call (OpenAI → Anthropic) for conversational queries
-        where no SAP data payload is involved. Returns None if no cloud key is set.
+        where no SAP data payload is involved. Returns None if no cloud key is set
+        or if the user has disabled cloud fallback.
         This gives research-quality, analytical responses without touching local model.
+
+        Messages are always sanitized before transmission: this method is reached
+        from the same multi-turn conversation_history as _call_cloud_fallback, which
+        may carry an earlier turn's SAP tool payload even though the CURRENT turn is
+        conversational — so the same redaction guarantee applies here.
         """
+        if not self.allow_cloud_fallback:
+            return None
+        messages = self._sanitize_for_cloud(messages)
         openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
         if openai_key:
             try:

@@ -42,10 +42,13 @@ _SECRET_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 # ── PII patterns (shared shape with core.audit_logger) ──────────────────────────
-_EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[\w.]+")
+# Bounded local part and domain labels. The previous unbounded `[\w.+\-]+@…`
+# backtracked over every prefix of a long word run, making redaction O(n^2) —
+# a 1 MB message occupied a worker for ~40 minutes (finding F-10).
+_EMAIL_RE = re.compile(r"[\w.+\-]{1,64}@[\w\-]{1,63}(?:\.[\w\-]{1,63}){1,4}")
 _PHONE_RE = re.compile(r"\b(\+?\d[\d\s\-().]{7,}\d)\b")
 # Credit-card-like 13-19 digit runs (allowing spaces/dashes)
-_CARD_RE = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+_CARD_RE = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")
 
 _REDACTORS = [(p, r) for p, r in _SECRET_PATTERNS] + [
     (_EMAIL_RE, "[EMAIL]"),
@@ -59,6 +62,23 @@ def redact_secrets(text):
     Non-strings are returned unchanged."""
     if not isinstance(text, str) or not text:
         return text
+    # Defence in depth: redaction runs on every response, so it must stay cheap
+    # even if a future pattern is added carelessly. Long inputs are redacted in
+    # overlapping chunks rather than in one pass.
+    if len(text) > _CHUNK:
+        step, overlap = _CHUNK, 256
+        parts, i = [], 0
+        while i < len(text):
+            parts.append(_redact_once(text[i:i + step + overlap]))
+            i += step
+        return "".join(parts)
+    return _redact_once(text)
+
+
+_CHUNK = 16_384
+
+
+def _redact_once(text: str) -> str:
     out = text
     for pattern, repl in _REDACTORS:
         out = pattern.sub(repl, out)
