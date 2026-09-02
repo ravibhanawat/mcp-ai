@@ -2,6 +2,7 @@
 that changes that shape breaks the interface silently, so it is asserted here."""
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from ai.errors import AuthFailed, CapabilityUnsupported
 from ai.manager import AIProviderManager
@@ -35,7 +36,10 @@ def collect(manager, **kw):
             messages=[{"role": "user", "content": "hi"}], **kw
         )
         return [t async for t in gen]
-    return asyncio.run(run())
+
+    with patch("ai.manager.log_usage"), \
+         patch("ai.credentials.read_credential", return_value=None):
+        return asyncio.run(run())
 
 
 class TestStreamShape(unittest.TestCase):
@@ -82,7 +86,9 @@ class TestStreamGuards(unittest.TestCase):
                 )
                 return [t async for t in gen]
 
-            asyncio.run(run())
+            with patch("ai.manager.log_usage"), \
+                 patch("ai.credentials.read_credential", return_value=None):
+                asyncio.run(run())
             sent = s.requests[0]["messages"][-1]["content"]
             self.assertNotIn("99", sent)
 
@@ -110,7 +116,9 @@ class TestEventLoopIsNotBlocked(unittest.TestCase):
                     pass
                 await task
 
-        asyncio.run(run())
+        with patch("ai.manager.log_usage"), \
+             patch("ai.credentials.read_credential", return_value=None):
+            asyncio.run(run())
         self.assertEqual(5, len(ticks))
 
 
