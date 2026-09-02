@@ -4169,3 +4169,8 @@
 .empty         { text-align: center; color: var(--text-muted, #666); padding: 24px; }
 .mono          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                  font-size: 12px; }
+
+.check-pass { color: #16653C; font-size: 12px; }
+.check-fail { color: #991B1B; font-size: 12px; }
+.caps { border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+.caps legend { font-size: 12px; padding: 0 6px; }
