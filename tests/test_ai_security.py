@@ -9,34 +9,31 @@ from unittest.mock import patch
 
 from ai.manager import AIProviderManager
 from ai.router import ModelRouter
-from ai.types import Capability, ProviderType, Purpose, TenantPolicy
+from ai.types import Capability, Purpose, TenantPolicy
 from auth.rbac import get_allowed_tools
 from tests.fakes.fake_provider_server import FakeProviderServer
 from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
-
-ALL_PROVIDER_TYPES = [
-    ProviderType.OLLAMA, ProviderType.OPENAI, ProviderType.AZURE_OPENAI,
-    ProviderType.ANTHROPIC, ProviderType.CUSTOM,
-]
 
 ROLES = ["admin", "fi_co_analyst", "mm_analyst", "sd_analyst", "hr_manager",
          "pp_planner", "abap_developer", "re_analyst", "read_only"]
 
 
 class TestAuthorizationIsModelIndependent(unittest.TestCase):
-    """Requirement 17. Changing the model must never change what a user may read."""
+    """Requirement 17. Changing the model must never change what a user may read.
 
-    def test_allowed_tool_set_is_identical_across_every_provider_type(self):
-        baseline = {role: sorted(get_allowed_tools([role])) for role in ROLES}
-        for ptype in ALL_PROVIDER_TYPES:
-            store = InMemoryConfigStore()
-            store.add_provider(make_provider_row(id="p", provider_type=ptype))
-            store.add_model(make_model_row(id="m", provider_id="p"), {Capability.CHAT})
-            store.set_policy(TenantPolicy("default", False, True, "m", None, None))
-            AIProviderManager(store=store, router=ModelRouter(store))
-            for role in ROLES:
-                with self.subTest(provider_type=ptype, role=role):
-                    self.assertEqual(baseline[role], sorted(get_allowed_tools([role])))
+    Important I5 (final whole-branch review): this class used to also carry
+    test_allowed_tool_set_is_identical_across_every_provider_type, which built
+    an AIProviderManager per ProviderType, discarded it without dispatching
+    through it, and then compared get_allowed_tools(role) — a pure function of
+    auth.rbac that never touches ai/ at all. No configuration built in the
+    loop could have made that assertion fail, so the loop over five provider
+    types proved nothing beyond "constructing a manager doesn't raise".
+    Deleted rather than widened into a real per-adapter dispatch test (five
+    live-request shapes, including Azure's deployment-scoped URLs, for a
+    property that test_the_ai_package_never_imports_the_authorization_modules
+    below already proves structurally and permanently: RBAC only lives in
+    auth.rbac / core.authorization, and ai/ cannot import either.
+    """
 
     def test_finance_role_still_cannot_reach_hr_tools(self):
         self.assertNotIn("get_payslip", get_allowed_tools(["fi_co_analyst"]))

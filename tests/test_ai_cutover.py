@@ -82,6 +82,52 @@ class TestPromptProfile(unittest.TestCase):
         self.assertNotIn("_use_mlx", source)
 
 
+class TestPromptProfileUsesTheRequestedModel(unittest.TestCase):
+    """Important I2. `chat()` and `chat_stream()`'s prompt_profile lookup used
+    to call resolve_only() with no requested_model_id, while the eventual
+    dispatch (_call_llm / _call_llm_stream) calls it WITH self.requested_model_id.
+    So the router could resolve two different models for the same request: one
+    (whichever it picks with no user selection) to choose the system prompt
+    shape, and a different one (the user's actual selection) to receive it —
+    exactly the mismatch prompt_profile exists to prevent, since a fine-tuned
+    model fed the wrong-shaped prompt hallucinates against tool names it was
+    never trained on."""
+
+    def _spy(self, seen_resolve_kwargs):
+        from unittest.mock import MagicMock
+
+        class _SpyManager:
+            def resolve_only(self, **kw):
+                seen_resolve_kwargs.append(kw)
+                resolution = MagicMock()
+                resolution.resolved.model.prompt_profile = "registry_tool_json"
+                resolution.resolved.provider.name = "test"
+                resolution.resolved.model.id = "m1"
+                resolution.resolved.model.model_name = "Test Model"
+                resolution.resolved.model.model_identifier = "test-model"
+                return resolution
+
+            def chat(self, **kw):
+                response = MagicMock()
+                response.content = "Test response"
+                return response
+
+        return _SpyManager()
+
+    def test_chat_resolves_the_prompt_profile_with_requested_model_id(self):
+        from agent.sap_agent import SAPAgent
+
+        seen = []
+        agent = SAPAgent(manager=self._spy(seen), requested_model_id="explicitly-requested")
+        agent.chat(user_message="some unmatched conversational query")
+
+        self.assertTrue(seen, "resolve_only was never called for the prompt profile")
+        self.assertEqual(
+            "explicitly-requested", seen[0].get("requested_model_id"),
+            f"prompt-profile resolution did not receive requested_model_id: {seen[0]}",
+        )
+
+
 class TestBackendStatusNeverRaises(unittest.TestCase):
     """Verify that backend_status() never raises, even when credentials cannot be decrypted."""
 
@@ -205,9 +251,19 @@ class TestRequestedModelIdThreading(unittest.TestCase):
                          f"requested_model_id not in manager.chat() kwargs. Got: {seen_chat_kwargs}")
 
     def test_requested_model_id_reaches_the_manager_on_stream(self):
-        """Verify that requested_model_id is passed through manager.stream()."""
+        """Verify that requested_model_id is passed through manager.stream().
+
+        Important I3 (flagged at Task 19): the original version of this test
+        built a spy, never called it, and asserted only
+        hasattr(agent, '_call_llm_stream') — which passes whether or not the
+        forwarding line exists. This version actually drives
+        _call_llm_stream() through an async generator (the pattern
+        tests/test_ai_streaming.py's `collect()` helper uses) and asserts the
+        real kwarg the spy received.
+        """
+        import asyncio
         from agent.sap_agent import SAPAgent
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import MagicMock
 
         seen_stream_kwargs = {}
 
@@ -230,10 +286,18 @@ class TestRequestedModelIdThreading(unittest.TestCase):
                 return _gen()
 
         agent = SAPAgent(manager=_SpyManager(), requested_model_id="explicitly-requested-stream")
-        # We can't easily test async streaming in unittest, but we can at least
-        # verify the method signature includes it. The chat test is the primary one.
-        # For completeness, let's just verify that _call_llm_stream accepts the parameter.
-        self.assertTrue(hasattr(agent, '_call_llm_stream'))
+
+        async def _drive():
+            gen = agent._call_llm_stream([{"role": "user", "content": "hi"}])
+            return [t async for t in gen]
+
+        tokens = asyncio.run(_drive())
+
+        self.assertEqual(["test token"], tokens)
+        self.assertEqual(
+            "explicitly-requested-stream", seen_stream_kwargs.get("requested_model_id"),
+            f"requested_model_id not in manager.stream() kwargs. Got: {seen_stream_kwargs}",
+        )
 
 
 if __name__ == "__main__":

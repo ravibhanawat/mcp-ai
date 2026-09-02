@@ -11,7 +11,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import uuid
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -119,7 +119,17 @@ class ProviderIn(BaseModel):
     #: Raising this lets SAP records reach an external provider unredacted, so it
     #: defaults off and every change is audited.
     sap_data_permitted: bool = False
-    egress_class_override: str | None = None
+    #: Constrained to exactly the two values ai.types.EgressClass and
+    #: ResolvedModel.is_external understand. A free-form str here (the
+    #: original type) let a typo or an unrecognised value pass FastAPI
+    #: validation and get written straight to the egress_class column — and
+    #: with is_external's OLD "== 'external'" check, anything but that exact
+    #: string was treated as not-external, so a misspelled override silently
+    #: disabled SAP-data redaction for that provider. Now the API boundary
+    #: itself refuses anything else with a 422, before it ever reaches the
+    #: database, and is_external separately fails closed on any value that
+    #: still finds its way past this (defence in depth).
+    egress_class_override: Literal["local", "external"] | None = None
     is_active: bool = True
     api_key: str | None = None
 
@@ -134,7 +144,7 @@ class ProviderUpdate(BaseModel):
     timeout_seconds: int | None = Field(default=None, ge=1, le=600)
     max_retries: int | None = Field(default=None, ge=0, le=10)
     sap_data_permitted: bool | None = None
-    egress_class_override: str | None = None
+    egress_class_override: Literal["local", "external"] | None = None
     is_active: bool | None = None
     api_key: str | None = None
 
@@ -449,14 +459,34 @@ def create_model(body: ModelIn, admin: dict = Depends(require_admin)):
 
 @router.patch("/models/{model_id}", response_model=ModelOut)
 def update_model(model_id: str, body: ModelIn, admin: dict = Depends(require_admin)):
-    if not _get_model_row(model_id, DEFAULT_TENANT):
+    """Requirement 22's activation gate must survive a PATCH, not just a
+    fresh create. `provider_id`, `model_identifier` and `purpose` together
+    define WHICH model this row actually resolves to at dispatch time — the
+    exact thing `validate()`/`activate_model()` checked. Changing any of them
+    on an already-active model, without this guard, would let an admin swap
+    what an active row points at (e.g. re-point it at an unreachable provider,
+    or one that doesn't offer that identifier) with no revalidation at all,
+    bypassing the activation gate entirely. Cosmetic fields (name, tuning
+    parameters, prompt_profile) do not affect what gets dispatched to, so they
+    do not force deactivation.
+    """
+    existing = _get_model_row(model_id, DEFAULT_TENANT)
+    if not existing:
         raise HTTPException(404, "Model not found.")
-    _update_model_row(model_id, DEFAULT_TENANT, {
+    updates = {
         "provider_id": body.provider_id, "model_name": body.model_name,
         "model_identifier": body.model_identifier, "purpose": body.purpose.value,
         "context_window": body.context_window, "max_tokens": body.max_tokens,
         "temperature": body.temperature, "prompt_profile": body.prompt_profile,
-    })
+    }
+    identity_changed = (
+        existing["provider_id"] != body.provider_id
+        or existing["model_identifier"] != body.model_identifier
+        or existing["purpose"] != body.purpose.value
+    )
+    if identity_changed and bool(existing["is_active"]):
+        updates["is_active"] = False
+    _update_model_row(model_id, DEFAULT_TENANT, updates)
     if body.capabilities is not None:
         set_capabilities(
             model_id, DEFAULT_TENANT,

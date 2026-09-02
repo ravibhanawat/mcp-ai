@@ -702,7 +702,10 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             return self.auto_research(user_message, allowed_tools=allowed_tools)
 
         # ── Resolve model to get prompt_profile ────────────────────────────────
-        resolution = self.manager.resolve_only(tenant_id=self.tenant_id, purpose=Purpose.CHAT)
+        resolution = self.manager.resolve_only(
+            tenant_id=self.tenant_id, purpose=Purpose.CHAT,
+            requested_model_id=self.requested_model_id,
+        )
         prompt_profile = resolution.resolved.model.prompt_profile
         is_trained_model = prompt_profile == "trained_tool_json"
 
@@ -988,7 +991,10 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
         # ── Resolve model to get prompt_profile ────────────────────────────────
         from ai.types import Purpose
-        resolution = self.manager.resolve_only(tenant_id=self.tenant_id, purpose=Purpose.CHAT)
+        resolution = self.manager.resolve_only(
+            tenant_id=self.tenant_id, purpose=Purpose.CHAT,
+            requested_model_id=self.requested_model_id,
+        )
         prompt_profile = resolution.resolved.model.prompt_profile
         is_trained_model = prompt_profile == "trained_tool_json"
 

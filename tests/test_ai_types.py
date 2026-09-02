@@ -75,6 +75,17 @@ class TestResolvedModel(unittest.TestCase):
         self.assertFalse(local.is_external)
         self.assertTrue(cloud.is_external)
 
+    def test_is_external_fails_closed_on_an_unrecognised_egress_class(self):
+        """Important I1: is_external must not silently treat a typo or an
+        unknown value as safe. Only the exact string 'local' counts as
+        not-external, so anything else — including a value nothing in the
+        codebase would ever intentionally write — still triggers the
+        SAP-data redaction gate."""
+        typo = ResolvedModel(make_model(), make_provider(egress_class="External"), frozenset())
+        unknown = ResolvedModel(make_model(), make_provider(egress_class="somewhere-else"), frozenset())
+        self.assertTrue(typo.is_external)
+        self.assertTrue(unknown.is_external)
+
     def test_configs_are_immutable(self):
         with self.assertRaises(Exception):
             make_model().temperature = 1.5

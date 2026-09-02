@@ -113,7 +113,13 @@ class ResolvedModel:
 
     @property
     def is_external(self) -> bool:
-        return self.provider.egress_class == EgressClass.EXTERNAL.value
+        # Fail closed: only the known-safe "local" value counts as not
+        # external. An unrecognised egress_class — a typo written straight to
+        # the column, a future value nothing here knows about yet — must still
+        # trigger the SAP-data redaction gate rather than silently bypass it,
+        # which `== EgressClass.EXTERNAL.value` would have done for anything
+        # that wasn't exactly "external".
+        return self.provider.egress_class != EgressClass.LOCAL.value
 
 
 @dataclass(frozen=True)

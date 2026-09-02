@@ -115,6 +115,28 @@ class TestEgressClassification(unittest.TestCase):
         from api.routes_ai_admin import ProviderIn
         self.assertFalse(ProviderIn(name="x", provider_type="OPENAI").sap_data_permitted)
 
+    def test_egress_class_override_accepts_only_local_or_external(self):
+        """Important I1: before this, egress_class_override was a bare str, so
+        any typo ('External', 'externel', ...) passed validation and was
+        written straight to the egress_class column, where the old
+        `is_external == 'external'` check then treated it as NOT external —
+        silently disabling SAP-data redaction for that provider."""
+        from api.routes_ai_admin import ProviderIn
+        ProviderIn(name="x", provider_type="OPENAI", egress_class_override="local")
+        ProviderIn(name="x", provider_type="OPENAI", egress_class_override="external")
+        ProviderIn(name="x", provider_type="OPENAI", egress_class_override=None)
+        with self.assertRaises(Exception):
+            ProviderIn(name="x", provider_type="OPENAI", egress_class_override="External")
+        with self.assertRaises(Exception):
+            ProviderIn(name="x", provider_type="OPENAI", egress_class_override="somewhere-else")
+
+    def test_create_provider_rejects_an_invalid_egress_class_override_with_422(self):
+        resp = client_as(["admin"]).post("/admin/ai/providers", json={
+            "name": "Cloud", "provider_type": "OPENAI",
+            "base_url": "https://api.openai.com", "egress_class_override": "External",
+        })
+        self.assertEqual(422, resp.status_code)
+
 
 MODEL_ROW = {
     "id": "m1", "tenant_id": "default", "provider_id": "p1", "model_name": "Chat",
@@ -194,6 +216,87 @@ class TestModelActivation(unittest.TestCase):
         self.assertEqual(
             403, client_as(["sd_analyst"]).post("/admin/ai/models/m1/activate").status_code
         )
+
+
+ACTIVE_MODEL_ROW = {**MODEL_ROW, "is_active": True}
+
+
+class TestModelUpdate(unittest.TestCase):
+    """Important I11: PATCH /models/{id} let an admin change provider_id,
+    model_identifier or purpose on an already-active model with no
+    revalidation at all — those three fields are exactly what determines
+    which provider and model identifier a dispatch actually reaches, which is
+    what requirement 22's activation gate is supposed to guard. Changing any
+    of them on an active row must deactivate it, forcing re-activation
+    through validate()/activate_model() again."""
+
+    def setUp(self):
+        from ai.store import set_store
+        from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", name="Local"))
+        store.add_provider(make_provider_row(id="p2", name="Other"))
+        store.add_model(make_model_row(id="m1", provider_id="p1"))
+        set_store(store)
+
+    def tearDown(self):
+        from ai.store import set_store
+        set_store(None)
+
+    def _patch_and_update(self, existing_row, body):
+        captured = {}
+        with patch("api.routes_ai_admin._get_model_row", return_value=existing_row), \
+             patch("api.routes_ai_admin._update_model_row",
+                   side_effect=lambda mid, tid, values: captured.update(values)), \
+             patch("api.routes_ai_admin._invalidate"):
+            resp = client_as(["admin"]).patch("/admin/ai/models/m1", json=body)
+        return resp, captured
+
+    def test_changing_provider_id_on_an_active_model_deactivates_it(self):
+        resp, captured = self._patch_and_update(ACTIVE_MODEL_ROW, {
+            "provider_id": "p2", "model_name": "Chat",
+            "model_identifier": ACTIVE_MODEL_ROW["model_identifier"], "purpose": "CHAT",
+        })
+        self.assertEqual(200, resp.status_code)
+        self.assertIn("is_active", captured)
+        self.assertFalse(captured["is_active"])
+
+    def test_changing_model_identifier_on_an_active_model_deactivates_it(self):
+        resp, captured = self._patch_and_update(ACTIVE_MODEL_ROW, {
+            "provider_id": ACTIVE_MODEL_ROW["provider_id"], "model_name": "Chat",
+            "model_identifier": "a-different-identifier", "purpose": "CHAT",
+        })
+        self.assertEqual(200, resp.status_code)
+        self.assertFalse(captured["is_active"])
+
+    def test_changing_purpose_on_an_active_model_deactivates_it(self):
+        resp, captured = self._patch_and_update(ACTIVE_MODEL_ROW, {
+            "provider_id": ACTIVE_MODEL_ROW["provider_id"], "model_name": "Chat",
+            "model_identifier": ACTIVE_MODEL_ROW["model_identifier"], "purpose": "REASONING",
+        })
+        self.assertEqual(200, resp.status_code)
+        self.assertFalse(captured["is_active"])
+
+    def test_a_cosmetic_only_change_leaves_an_active_model_active(self):
+        """Renaming a model or tuning its temperature does not change what it
+        dispatches to, so it must not force re-activation."""
+        resp, captured = self._patch_and_update(ACTIVE_MODEL_ROW, {
+            "provider_id": ACTIVE_MODEL_ROW["provider_id"], "model_name": "A Renamed Chat Model",
+            "model_identifier": ACTIVE_MODEL_ROW["model_identifier"], "purpose": "CHAT",
+            "temperature": 0.9,
+        })
+        self.assertEqual(200, resp.status_code)
+        self.assertNotIn("is_active", captured)
+
+    def test_changing_identity_on_an_already_inactive_model_needs_no_extra_write(self):
+        resp, captured = self._patch_and_update(MODEL_ROW, {  # MODEL_ROW.is_active is False
+            "provider_id": "p2", "model_name": "Chat",
+            "model_identifier": MODEL_ROW["model_identifier"], "purpose": "CHAT",
+        })
+        self.assertEqual(200, resp.status_code)
+        # Already inactive: no need to force it, but it must not become active.
+        self.assertNotEqual(True, captured.get("is_active"))
 
 
 class TestModelCreation(unittest.TestCase):
