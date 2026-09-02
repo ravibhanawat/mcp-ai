@@ -54,6 +54,7 @@ from auth.jwt_handler import (
 from auth.rbac import ALL_ROLES, check_tool_access, get_allowed_tools
 from auth import users as user_store
 from api.oauth import router as _oauth_router, verify_mcp_token
+from api.deps import get_current_user, require_admin
 import jwt as _jwt
 import json
 
@@ -208,6 +209,10 @@ app = FastAPI(
 
 # Mount OAuth 2.1 endpoints (RFC 9728, RFC 8414, RFC 7591, PKCE)
 app.include_router(_oauth_router)
+
+# Mount AI provider administration endpoints
+from api.routes_ai_admin import router as _ai_admin_router
+app.include_router(_ai_admin_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -374,40 +379,8 @@ def _clear_all_sessions() -> None:
 
 
 # ── Auth bearer ────────────────────────────────────────────────────────────────
-_bearer = HTTPBearer(auto_error=False)
-
-_GUEST_USER = {"user_id": "guest", "roles": ["read_only"], "full_name": "Guest (auth disabled)"}
-
-
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> dict:
-    """
-    Validate JWT Bearer token and return user payload.
-    When DISABLE_AUTH=true (dev only) returns a limited read_only guest user.
-    """
-    if not _AUTH_ENABLED:
-        return _GUEST_USER
-
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header. Use: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    try:
-        payload = decode_token(credentials.credentials)
-        return {"user_id": payload["sub"], "roles": payload.get("roles", [])}
-    except _jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Access token expired. Use /auth/refresh to renew.")
-    except _jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token.")
-
-
-def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    if "admin" not in current_user.get("roles", []):
-        raise HTTPException(status_code=403, detail="Admin role required.")
-    return current_user
+# get_current_user and require_admin are now in api/deps.py (extracted so
+# route modules can import them without circular imports)
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────

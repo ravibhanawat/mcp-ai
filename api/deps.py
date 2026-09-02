@@ -1,0 +1,52 @@
+"""
+Shared FastAPI auth dependencies.
+
+Extracted from api/server.py so route modules can depend on authentication
+without importing the module that mounts them. Behaviour is unchanged: this is
+a move, not a rewrite.
+"""
+from __future__ import annotations
+
+import os
+
+import jwt as _jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from auth.jwt_handler import decode_token
+
+_bearer = HTTPBearer(auto_error=False)
+
+_APP_ENV = os.environ.get("APP_ENV", "development").lower()
+_AUTH_ENABLED = not (
+    os.environ.get("DISABLE_AUTH", "false").lower() in ("true", "1", "yes")
+    and _APP_ENV == "development"
+)
+_GUEST_USER = {"user_id": "guest", "roles": ["read_only"], "full_name": "Guest (auth disabled)"}
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    """Validate the JWT bearer token and return the user payload."""
+    if not _AUTH_ENABLED:
+        return _GUEST_USER
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header. Use: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = decode_token(credentials.credentials)
+        return {"user_id": payload["sub"], "roles": payload.get("roles", [])}
+    except _jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Access token expired. Use /auth/refresh to renew.")
+    except _jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token.")
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    if "admin" not in current_user.get("roles", []):
+        raise HTTPException(status_code=403, detail="Admin role required.")
+    return current_user
