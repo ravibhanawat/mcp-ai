@@ -245,7 +245,12 @@ class LLMReportAgent:
             collected_data=json.dumps(collected_data, indent=2, default=str),
         )
         response = self._call_llm([
-            {"role": "system", "content": prompt},
+            # `prompt` embeds json.dumps(collected_data, ...) — the raw SAP
+            # tool results — in the *system* message, not the user message.
+            # It carries no "SAP tool '...' returned:" prefix, so
+            # core.security.sanitize_sap_payload needs this structural marker
+            # to find it at all.
+            {"role": "system", "content": prompt, "sap_payload": True},
             {"role": "user",   "content": "Format the collected data into the chart payload JSON."},
         ])
         return self._parse_json(response)

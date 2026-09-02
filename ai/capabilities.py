@@ -28,15 +28,24 @@ DEFAULT_CAPABILITIES: dict[Purpose, set[Capability]] = {
 }
 
 
-def _execute(sql: str, params: tuple) -> int:
+def _execute(sql: str, params: tuple, conn=None) -> int:
     from db.connection import execute
-    return execute(sql, params)
+    return execute(sql, params, conn=conn)
 
 
 def set_capabilities(
-    model_id: str, tenant_id: str, caps: dict[Capability, bool], source: str = "declared"
+    model_id: str, tenant_id: str, caps: dict[Capability, bool], source: str = "declared",
+    conn=None,
 ) -> None:
-    """Replace the capability records for a model."""
+    """Replace the capability records for a model.
+
+    `conn`, when given, runs every insert on that connection instead of a
+    fresh pooled one per call — ai.seed uses this so a model's capability rows
+    commit or roll back atomically with the provider/model rows they reference
+    (ai_model_capabilities.model_id is a foreign key to ai_models.id, so
+    writing it on a *different*, already-committed connection while the model
+    row is still part of an open transaction elsewhere would fail outright).
+    """
     for capability, supported in caps.items():
         _execute(
             """INSERT INTO ai_model_capabilities
@@ -47,6 +56,7 @@ def set_capabilities(
                    source      = EXCLUDED.source,
                    verified_at = NOW()""",
             (model_id, tenant_id, capability.value, supported, source),
+            conn=conn,
         )
 
 

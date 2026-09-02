@@ -36,6 +36,14 @@ class Resolution:
     """A resolved model plus why it was chosen — the 'why' goes to the usage log."""
     resolved: ResolvedModel
     selection_source: str        # 'user' | 'intent' | 'purpose_rule' | 'default' | 'sole_active'
+    #: True when the caller explicitly requested a model via requested_model_id
+    #: and policy or the tenant allowlist refused it — even though resolution
+    #: went on to succeed via a different source (a purpose rule, the tenant
+    #: default, ...). ai.manager reads this to record authorization_result
+    #: "denied" on the usage row for that dispatch; without it, a refused
+    #: model selection that still resolved to *something* was audited exactly
+    #: like an ordinary request with no selection at all.
+    requested_model_denied: bool = False
 
 
 class ModelRouter:
@@ -69,7 +77,7 @@ class ModelRouter:
         `requested_model_id` must come from an authenticated request field. There
         is deliberately no parameter for message text.
         """
-        candidate, source = self._select(tenant_id, purpose, intent, requested_model_id)
+        candidate, source, denied = self._select(tenant_id, purpose, intent, requested_model_id)
         if candidate is None:
             raise NoModelConfigured(
                 f"No active model is configured for purpose "
@@ -80,66 +88,76 @@ class ModelRouter:
         self._check_authorized(tenant_id, candidate)
         self._check_residency(candidate, local_only, purpose, intent, tenant_id)
         self._check_capabilities(candidate, required)
-        return Resolution(candidate, source)
+        return Resolution(candidate, source, requested_model_denied=denied)
 
     # ── selection ────────────────────────────────────────────────────────────
 
     def _select(
         self, tenant_id: str, purpose: Purpose | None, intent: str | None,
         requested_model_id: str | None,
-    ) -> tuple[ResolvedModel | None, str]:
-        user_choice = self._user_selection(tenant_id, requested_model_id)
+    ) -> tuple[ResolvedModel | None, str, bool]:
+        user_choice, denied = self._user_selection(tenant_id, requested_model_id)
         if user_choice is not None:
-            return user_choice, "user"
+            return user_choice, "user", False
 
         if intent:
             by_intent = self._first_active_from_rules(tenant_id, "intent", intent)
             if by_intent is not None:
-                return by_intent, "intent"
+                return by_intent, "intent", denied
 
         if purpose is None:
-            return None, "none"
+            return None, "none", denied
 
         by_rule = self._first_active_from_rules(tenant_id, "purpose", purpose.value)
         if by_rule is not None:
-            return by_rule, "purpose_rule"
+            return by_rule, "purpose_rule", denied
 
         default_id = self._default_model_id(tenant_id, purpose)
         if default_id:
             resolved = self._active_resolved(default_id, tenant_id)
             if resolved is not None:
-                return resolved, "default"
+                return resolved, "default", denied
             # An administrator explicitly configured this default; if it no
             # longer resolves (deleted or deactivated), that is a
             # misconfiguration to surface, not a cue to guess among whatever
             # else happens to be active for this purpose.
-            return None, "none"
+            return None, "none", denied
 
         actives = self.store.list_models(tenant_id, purpose=purpose, active_only=True)
         if len(actives) == 1:
             resolved = self.store.resolved(actives[0].id, tenant_id)
             if resolved is not None:
-                return resolved, "sole_active"
-        return None, "none"
+                return resolved, "sole_active", denied
+        return None, "none", denied
 
-    def _user_selection(self, tenant_id: str, requested_model_id: str | None) -> ResolvedModel | None:
-        """Honour an explicit selection only when policy and allowlist both permit."""
+    def _user_selection(
+        self, tenant_id: str, requested_model_id: str | None
+    ) -> tuple[ResolvedModel | None, bool]:
+        """Honour an explicit selection only when policy and allowlist both permit.
+
+        Returns (resolved_model_or_None, was_denied). `was_denied` is True
+        only when a selection was actually requested and refused by policy or
+        the allowlist — never when no selection was made at all (nothing to
+        deny), and never when the requested model simply fails to resolve for
+        an unrelated reason (deleted, deactivated) — that is an ordinary
+        "not found", not a refusal.
+        """
         if not requested_model_id:
-            return None
+            return None, False
         policy = self.store.get_policy(tenant_id)
         if not policy.allow_user_selection:
             _logger.info(
                 "Model selection %r ignored: user selection disabled for tenant %s.",
                 requested_model_id, tenant_id,
             )
-            return None
+            return None, True
         if not self.store.is_user_selectable(tenant_id, requested_model_id):
             _logger.info(
                 "Model selection %r ignored: not in the tenant %s allowlist.",
                 requested_model_id, tenant_id,
             )
-            return None
-        return self._active_resolved(requested_model_id, tenant_id)
+            return None, True
+        return self._active_resolved(requested_model_id, tenant_id), False
 
     def _first_active_from_rules(
         self, tenant_id: str, rule_type: str, match_key: str

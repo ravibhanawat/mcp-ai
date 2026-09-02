@@ -68,10 +68,54 @@ class AIProviderManager:
             and not resolved.provider.sap_data_permitted
         )
 
+    @staticmethod
+    def _redaction_took_effect(before: list[dict], after: list[dict]) -> bool:
+        """True only if sanitize_sap_payload actually changed some content.
+
+        `_should_redact` is a policy decision ("this dispatch MUST be
+        redacted"); it says nothing about whether any message actually matched
+        a recognised SAP-payload shape. The two must never be allowed to
+        diverge silently — a policy decision of "must redact" paired with an
+        unsanitized payload is exactly the gap that let sap-bearing messages
+        from agent.autonomous_agent and agent.report_agent reach an external
+        provider unredacted while ai_usage_logs still recorded
+        redaction_applied=True.
+        """
+        if len(before) != len(after):
+            return True
+        return any(b.get("content") != a.get("content") for b, a in zip(before, after))
+
+    def _confirm_redacted(
+        self, resolved: ResolvedModel, before: list[dict], after: list[dict]
+    ) -> bool:
+        """Fail closed on the audit trail: if redaction was required but
+        nothing was actually rewritten, that is a bug in a caller (a
+        SAP-bearing message built without the prefix shape or the
+        `sap_payload` marker sanitize_sap_payload looks for) — not a clean
+        pass. Log it loudly and report the true outcome, so `redaction_applied`
+        on the usage row never claims a redaction that did not happen.
+        """
+        took_effect = self._redaction_took_effect(before, after)
+        if not took_effect:
+            _logger.warning(
+                "Redaction was required before dispatching to provider %r "
+                "(external, SAP data not permitted) but sanitize_sap_payload "
+                "made no change to the outgoing messages — no message matched "
+                "the prefix shape or carried a sap_payload marker. Recording "
+                "redaction_applied=False so the audit trail reflects reality; "
+                "the caller that built this message needs a marker.",
+                resolved.provider.name,
+            )
+        return took_effect
+
     def _prepare(self, resolved: ResolvedModel, messages: list[dict],
                  carries_sap_data: bool) -> tuple[list[Message], bool]:
         redact = self._should_redact(resolved, carries_sap_data)
-        prepared = sanitize_sap_payload(messages) if redact else messages
+        if redact:
+            prepared = sanitize_sap_payload(messages)
+            redact = self._confirm_redacted(resolved, messages, prepared)
+        else:
+            prepared = messages
         return [Message(role=m["role"], content=m.get("content", "")) for m in prepared], redact
 
     def _prepare_texts(self, resolved: ResolvedModel, texts: list[str],
@@ -88,7 +132,8 @@ class AIProviderManager:
             return texts, False
         wrapped = [{"role": "user", "content": t} for t in texts]
         sanitized = sanitize_sap_payload(wrapped)
-        return [m["content"] for m in sanitized], True
+        redact = self._confirm_redacted(resolved, wrapped, sanitized)
+        return [m["content"] for m in sanitized], redact
 
     # ── dispatch ─────────────────────────────────────────────────────────────
 
@@ -128,6 +173,14 @@ class AIProviderManager:
             provider = build_provider(model.provider, api_key)
             return provider.chat(model.model, prepared, tools=tools)
 
+        # If the caller asked for a specific model and the router refused it
+        # (policy or the tenant allowlist), that refusal must survive into the
+        # audit trail even though resolution went on to succeed via a
+        # different source — otherwise a denied selection that still resolved
+        # to *something* is indistinguishable from an ordinary request with no
+        # selection at all.
+        authorization_result = "denied" if resolution.requested_model_denied else "allowed"
+
         started = time.monotonic()
         attempts: list[tuple[ResolvedModel, BaseException | None]] = []
         try:
@@ -139,12 +192,14 @@ class AIProviderManager:
             self._log_attempts(
                 attempts, tenant_id, user_id, purpose, intent, request_id, primary,
                 started, redaction_by_model, usage=None,
+                authorization_result=authorization_result,
             )
             raise
         self._log_attempts(
             attempts, tenant_id, user_id, purpose, intent, request_id, primary,
             started, redaction_by_model,
             usage=result.usage, model_used=used, fell_back=fell_back,
+            authorization_result=authorization_result,
         )
         return result
 
@@ -174,6 +229,7 @@ class AIProviderManager:
             self._log_resolution_failure(tenant_id, user_id, purpose, intent, request_id, exc)
             raise
         model = resolution.resolved
+        authorization_result = "denied" if resolution.requested_model_denied else "allowed"
         prepared, redacted = self._prepare(model, messages, carries_sap_data)
         api_key = self.credential_for(model, tenant_id)
         started = time.monotonic()
@@ -226,6 +282,7 @@ class AIProviderManager:
                     tenant_id, user_id, model, purpose, intent, request_id,
                     latency_ms=int((time.monotonic() - started) * 1000),
                     redacted=redacted, status=status, error_code=error_code,
+                    authorization_result=authorization_result,
                 ))
 
         return _logged()
@@ -294,13 +351,14 @@ class AIProviderManager:
         *, latency_ms: int | None, redacted: bool, status: str,
         error_code: str | None = None, usage: Usage | None = None,
         fallback_used: bool = False, fallback_from: str | None = None,
+        authorization_result: str = "allowed",
     ) -> UsageRecord:
         return UsageRecord(
             tenant_id=tenant_id, user_id=user_id,
             provider_id=model.provider.id, model_id=model.model.id,
             request_id=request_id,
             purpose=purpose.value if purpose else None, intent=intent, tool_used=None,
-            authorization_result="allowed",
+            authorization_result=authorization_result,
             prompt_tokens=usage.prompt_tokens if usage else 0,
             completion_tokens=usage.completion_tokens if usage else 0,
             latency_ms=latency_ms, fallback_used=fallback_used,
@@ -335,7 +393,7 @@ class AIProviderManager:
         intent: str | None, request_id: str | None, primary: ResolvedModel,
         started: float, redaction_by_model: dict[str, bool], *,
         usage: Usage | None = None, model_used: ResolvedModel | None = None,
-        fell_back: bool = False,
+        fell_back: bool = False, authorization_result: str = "allowed",
     ) -> None:
         elapsed = int((time.monotonic() - started) * 1000)
         for model, error in attempts:
@@ -349,6 +407,7 @@ class AIProviderManager:
                 usage=usage if succeeded else None,
                 fallback_used=fell_back and model.model.id != primary.model.id,
                 fallback_from=primary.model.id if model.model.id != primary.model.id else None,
+                authorization_result=authorization_result,
             ))
 
 

@@ -26,7 +26,7 @@ class FakeRows:
     def __init__(self):
         self.rows: dict[str, dict] = {}
 
-    def execute(self, sql, params):
+    def execute(self, sql, params, conn=None):
         if sql.strip().upper().startswith("DELETE"):
             provider_id, tenant_id = params
             row = self.rows.get(provider_id)
@@ -36,6 +36,14 @@ class FakeRows:
                 return 1
             return 0
         provider_id, tenant_id, ciphertext, key_version, last4 = params
+        existing = self.rows.get(provider_id)
+        # Mirror the production ON CONFLICT (provider_id) DO UPDATE ... WHERE
+        # tenant_id = EXCLUDED.tenant_id: a write for a provider_id that
+        # already belongs to a DIFFERENT tenant must not overwrite it. Without
+        # this, the fake would report isolation the production statement,
+        # before its own tenant guard, does not actually have.
+        if existing and existing["tenant_id"] != tenant_id:
+            return 0
         self.rows[provider_id] = {
             "provider_id": provider_id, "tenant_id": tenant_id,
             "ciphertext": ciphertext, "key_version": key_version, "last4": last4,
@@ -110,6 +118,21 @@ class TestCredentialRoundtrip(CredentialTestCase):
         store_credential("p1", "default", "sk-live-abcdwxyz")
         self.assertTrue(has_credential("p1", "default"))
         self.assertFalse(has_credential("p1", "other-tenant"))
+
+    def test_store_from_another_tenant_does_not_overwrite(self):
+        """The ON CONFLICT (provider_id) DO UPDATE ... WHERE tenant_id =
+        EXCLUDED.tenant_id clause is what stops a write for a different
+        tenant from replacing another tenant's ciphertext while leaving
+        tenant_id untouched — provider_id alone is the table's primary key,
+        so without that WHERE clause the conflict target would match
+        regardless of which tenant issued the write. Confirmed to fail if
+        that WHERE clause is dropped from the production SQL (verified by
+        temporarily removing it and re-running: the second store_credential
+        call overwrites p1's ciphertext under tenant 'default')."""
+        store_credential("p1", "default", "sk-live-original")
+        store_credential("p1", "other-tenant", "sk-live-attacker")
+        self.assertEqual("sk-live-original", read_credential("p1", "default"))
+        self.assertIsNone(read_credential("p1", "other-tenant"))
 
 
 class TestKeyFailures(CredentialTestCase):

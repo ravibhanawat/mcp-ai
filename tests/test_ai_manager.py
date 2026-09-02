@@ -1,6 +1,7 @@
 """Manager tests. The egress cases are the reason this file exists: every path
 that can send SAP data to an external provider is asserted here."""
 import asyncio
+import json
 import unittest
 from unittest.mock import patch
 
@@ -106,6 +107,61 @@ class TestEgress(ManagerTestCase):
                 )
         self.assertTrue(logged.call_args[0][0].redaction_applied)
 
+    def test_report_agent_shaped_system_message_is_redacted_externally(self):
+        """agent.report_agent._format embeds json.dumps(collected_data) into
+        the *system* message with no 'SAP tool ... returned:' prefix — the
+        exact shape core/security.py's old prefix-only match could never see
+        (Critical 2). This must not reach an external, unpermitted provider."""
+        report_agent_system_message = [
+            {
+                "role": "system",
+                "content": (
+                    "Format this data into a chart:\n"
+                    "{\n  \"get_payslip\": {\"salary\": 4200000, \"account\": \"ACC-9911\"}\n}"
+                ),
+                "sap_payload": True,
+            },
+            {"role": "user", "content": "Format the collected data into the chart payload JSON."},
+        ]
+        with FakeProviderServer(mode="ok") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                self.build(s.base_url, egress_class="external").chat(
+                    tenant_id="default", purpose=Purpose.SUMMARIZATION,
+                    messages=report_agent_system_message, carries_sap_data=True,
+                )
+        sent = json.dumps(s.requests[-1])
+        self.assertNotIn("4200000", sent)
+        self.assertNotIn("ACC-9911", sent)
+        self.assertTrue(logged.call_args[0][0].redaction_applied)
+
+    def test_autonomous_agent_shaped_user_message_is_redacted_externally(self):
+        """agent.autonomous_agent._build_context / _run_reasoning embed
+        json.dumps(...) of raw tool results into a *user* message with no
+        prefix shape either. Same Critical 2 gap, different agent and role."""
+        autonomous_agent_user_message = [
+            {"role": "system", "content": "You are a senior SAP business consultant."},
+            {
+                "role": "user",
+                "content": (
+                    "COLLECTED DATA SUMMARY:\n"
+                    "[get_payslip]: {\"salary\": 4200000, \"account\": \"ACC-9911\"}"
+                ),
+                "sap_payload": True,
+            },
+        ]
+        with FakeProviderServer(mode="ok") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                self.build(s.base_url, egress_class="external").chat(
+                    tenant_id="default", purpose=Purpose.REASONING,
+                    messages=autonomous_agent_user_message, carries_sap_data=True,
+                )
+        sent = json.dumps(s.requests[-1])
+        self.assertNotIn("4200000", sent)
+        self.assertNotIn("ACC-9911", sent)
+        self.assertTrue(logged.call_args[0][0].redaction_applied)
+
     def test_carries_sap_data_false_means_no_redaction_even_externally(self):
         with FakeProviderServer(mode="ok") as s:
             with patch("ai.manager.log_usage"), patch("ai.credentials.read_credential", return_value=None):
@@ -115,6 +171,113 @@ class TestEgress(ManagerTestCase):
                     carries_sap_data=False,
                 )
         self.assertIn("MIGO", self._sent_content(s))
+
+
+class TestRedactionFailsClosedOnTheAuditTrail(ManagerTestCase):
+    """A carries_sap_data=True call to an external, unpermitted provider where
+    no message actually matches a known SAP-payload shape (prefix or marker)
+    is a caller bug, not a clean pass. The audit trail must say what actually
+    happened, never what was merely intended."""
+
+    def test_unmatched_sap_bearing_call_is_not_recorded_as_redacted(self):
+        with FakeProviderServer(mode="ok") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                self.build(s.base_url, egress_class="external").chat(
+                    tenant_id="default", purpose=Purpose.CHAT,
+                    # carries_sap_data=True, but nothing here is shaped as a
+                    # SAP payload the redactor recognises — the caller-bug case.
+                    messages=[{"role": "user", "content": "plain text, no marker"}],
+                    carries_sap_data=True,
+                )
+        self.assertFalse(logged.call_args[0][0].redaction_applied)
+
+    def test_a_warning_is_logged_when_redaction_was_required_but_had_no_effect(self):
+        with self.assertLogs("ai.manager", level="WARNING") as cm:
+            with FakeProviderServer(mode="ok") as s:
+                with patch("ai.manager.log_usage"), \
+                     patch("ai.credentials.read_credential", return_value=None):
+                    self.build(s.base_url, egress_class="external").chat(
+                        tenant_id="default", purpose=Purpose.CHAT,
+                        messages=[{"role": "user", "content": "plain text, no marker"}],
+                        carries_sap_data=True,
+                    )
+        self.assertTrue(any("Redaction was required" in m for m in cm.output))
+
+
+class TestDeniedSelectionAuditing(unittest.TestCase):
+    """Important I8: ai.router.ModelRouter refuses a requested_model_id
+    (policy or allowlist) by falling back to another source rather than
+    raising — the request still succeeds, just not with the model the caller
+    asked for. Before this fix, ai.manager._record hard-coded
+    authorization_result="allowed" for every successful dispatch, so that
+    refusal never reached ai_usage_logs at all: an administrator auditing
+    "who tried to use a model they weren't allowed to" would see nothing."""
+
+    def build(self, server_url):
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", name="P", base_url=server_url, timeout_seconds=2))
+        store.add_model(
+            make_model_row(id="chat-local", provider_id="p1", purpose=Purpose.CHAT),
+            capabilities={Capability.CHAT},
+        )
+        store.add_model(
+            make_model_row(id="chat-cloud", provider_id="p1", purpose=Purpose.CHAT),
+            capabilities={Capability.CHAT},
+        )
+        store.set_policy(TenantPolicy(
+            tenant_id="default", allow_user_selection=True, fallback_enabled=False,
+            default_chat_model_id="chat-local", default_embedding_model_id=None,
+            default_reranker_model_id=None,
+        ))
+        # Deliberately NOT marking chat-cloud user_selectable: the request
+        # below asks for it anyway.
+        return AIProviderManager(store=store, router=ModelRouter(store))
+
+    def test_a_refused_selection_is_recorded_as_denied_even_though_the_request_succeeds(self):
+        with FakeProviderServer(mode="ok") as s:
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                resp = self.build(s.base_url).chat(
+                    tenant_id="default", purpose=Purpose.CHAT,
+                    messages=[{"role": "user", "content": "hi"}],
+                    requested_model_id="chat-cloud",
+                )
+        self.assertEqual(1, logged.call_count)
+        record = logged.call_args[0][0]
+        self.assertEqual("ok", record.status)
+        self.assertEqual("chat-local", record.model_id)
+        self.assertEqual("denied", record.authorization_result)
+
+    def test_an_honoured_selection_is_recorded_as_allowed(self):
+        with FakeProviderServer(mode="ok") as s:
+            store = InMemoryConfigStore()
+            store.add_provider(make_provider_row(id="p1", name="P", base_url=s.base_url, timeout_seconds=2))
+            store.add_model(
+                make_model_row(id="chat-local", provider_id="p1", purpose=Purpose.CHAT),
+                capabilities={Capability.CHAT},
+            )
+            store.add_model(
+                make_model_row(id="chat-cloud", provider_id="p1", purpose=Purpose.CHAT),
+                capabilities={Capability.CHAT},
+            )
+            store.set_policy(TenantPolicy(
+                tenant_id="default", allow_user_selection=True, fallback_enabled=False,
+                default_chat_model_id="chat-local", default_embedding_model_id=None,
+                default_reranker_model_id=None,
+            ))
+            store.set_tenant_model("default", "chat-cloud", user_selectable=True)
+            manager = AIProviderManager(store=store, router=ModelRouter(store))
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                manager.chat(
+                    tenant_id="default", purpose=Purpose.CHAT,
+                    messages=[{"role": "user", "content": "hi"}],
+                    requested_model_id="chat-cloud",
+                )
+        record = logged.call_args[0][0]
+        self.assertEqual("chat-cloud", record.model_id)
+        self.assertEqual("allowed", record.authorization_result)
 
 
 class TestFailureLogging(ManagerTestCase):

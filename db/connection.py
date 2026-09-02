@@ -91,28 +91,48 @@ def get_db():
 
 
 # ── Sync helpers (identical public signatures as the MySQL version) ────────────
+#
+# All three accept an optional `conn`: when given, the statement runs on that
+# connection instead of checking one out of the pool, and this function does
+# not commit or roll it back — the caller (typically a `with get_db() as conn:`
+# block) owns that transaction's boundary. This is what lets a caller like
+# ai.seed group several statements into one all-or-nothing commit instead of
+# each call auto-committing its own pooled connection independently.
 
-def query_one(sql: str, params: tuple = ()) -> dict[str, Any] | None:
+def query_one(sql: str, params: tuple = (), *, conn=None) -> dict[str, Any] | None:
     """Execute SELECT; return the first row as a plain dict, or None."""
-    with _get_pool().connection() as conn:
+    if conn is not None:
         with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return dict(row) if row else None
+    with _get_pool().connection() as _conn:
+        with _conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             row = cur.fetchone()
             return dict(row) if row else None
 
 
-def query_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+def query_all(sql: str, params: tuple = (), *, conn=None) -> list[dict[str, Any]]:
     """Execute SELECT; return all rows as a list of plain dicts."""
-    with _get_pool().connection() as conn:
+    if conn is not None:
         with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+    with _get_pool().connection() as _conn:
+        with _conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             return [dict(r) for r in cur.fetchall()]
 
 
-def execute(sql: str, params: tuple = ()) -> int:
+def execute(sql: str, params: tuple = (), *, conn=None) -> int:
     """Execute INSERT/UPDATE/DELETE; return rowcount."""
-    with _get_pool().connection() as conn:
+    if conn is not None:
         with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.rowcount
+    with _get_pool().connection() as _conn:
+        with _conn.cursor() as cur:
             cur.execute(sql, params)
             return cur.rowcount
 

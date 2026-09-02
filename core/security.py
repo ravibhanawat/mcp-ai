@@ -144,11 +144,27 @@ def classify_for_cache(*, tool_called: str | None, text: str | None) -> tuple[bo
 def sanitize_sap_payload(messages: list[dict]) -> list[dict]:
     """Strip SAP tool result bodies from a message list.
 
-    Tool results arrive as messages shaped:
-        "SAP tool 'X' returned:\\n{...}"
-    and may carry salaries, vendor bank details or invoice amounts. Keeping the
-    first line preserves enough context for the model to write a coherent
-    follow-up prompt without the record itself leaving the estate.
+    Two independent ways a message is recognised as SAP-bearing:
+
+      1. Content shaped "SAP tool 'X' returned:\\n{...}" — what SAPAgent's
+         _format_tool_response produces. Keeping the first line preserves
+         enough context for the model to write a coherent follow-up prompt
+         without the record itself leaving the estate. This is the original
+         path; SAPAgent and its tests depend on this exact shape and it must
+         keep working unchanged.
+
+      2. An explicit `sap_payload: True` marker on the message dict. Some
+         callers (agent.autonomous_agent, agent.report_agent) build a message
+         by embedding raw tool-result JSON into a larger prompt — planner
+         context, a reasoning summary, a report formatter's system prompt —
+         where there is no fixed "first line" to preserve the way the
+         prefix-shaped case has. Those callers set the marker on exactly the
+         message they built from tool results; this function is the only
+         place that reads it. The marker itself is never forwarded: a matched
+         message is rebuilt from scratch (role + redacted content only), and
+         ai.manager's conversion to the wire `Message` type reads only
+         role/content anyway, so it cannot leak downstream even if some other
+         caller forgot to strip it.
 
     This lived on SAPAgent, where it only ever guarded that class's own cloud
     fallback. It belongs here because ai.manager must be able to apply it to any
@@ -164,6 +180,11 @@ def sanitize_sap_payload(messages: list[dict]) -> list[dict]:
             sanitized.append({
                 **msg,
                 "content": f"{first_line}\n[SAP data redacted — not transmitted to external providers]",
+            })
+        elif msg.get("sap_payload") and isinstance(content, str):
+            sanitized.append({
+                "role": msg.get("role"),
+                "content": "[SAP data redacted — not transmitted to external providers]",
             })
         else:
             sanitized.append(dict(msg))

@@ -63,6 +63,12 @@ class InMemoryConfigStore(ConfigStore):
         for row in payload.get("models", []):
             caps = {Capability(c) for c in row.get("capabilities", [])}
             self.add_model(model_from_row(row), caps)
+        for row in payload.get("routing_rules", []):
+            self.add_rule(RoutingRule(
+                id=row["id"], tenant_id=row["tenant_id"], rule_type=row["rule_type"],
+                match_key=row["match_key"], model_id=row["model_id"],
+                priority=int(row["priority"]), is_active=bool(row["is_active"]),
+            ))
         policy = payload.get("policy")
         if policy:
             self.set_policy(TenantPolicy(**policy))

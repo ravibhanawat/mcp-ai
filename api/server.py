@@ -173,8 +173,18 @@ async def lifespan(app: FastAPI):
         await _aio.wait_for(_aio.to_thread(_run_ai_migrations), timeout=5.0)
         from ai.seed import seed_from_existing_config as _seed_ai
         await _aio.wait_for(_aio.to_thread(_seed_ai), timeout=10.0)
-    except _aio.TimeoutError:
-        _logger.warning("DB migration timed out at startup — DB may not be available.")
+    except Exception as _mig_exc:
+        # Broad on purpose: run_ai_migrations() already swallows every exception
+        # itself (a warning, not a raise), but seed_from_existing_config() does
+        # not — it runs a real SELECT COUNT(*) against ai_providers, which
+        # raises UndefinedTable when the migration above never actually ran
+        # (e.g. Postgres was down). Catching only TimeoutError let that escape
+        # lifespan and kill the whole process on a database that "must not stop
+        # the server from starting", per this same block's own migration step.
+        _logger.warning(
+            "DB migration/seed step failed or timed out at startup — DB may not "
+            "be available: %s", _mig_exc,
+        )
     # Open async PostgreSQL pool (used by streaming event_generator)
     # Hard 5-second timeout so a missing DB never stalls server startup.
     _async_pool_closer = None
@@ -672,6 +682,39 @@ def get_my_mcp_setup(current_user: dict = Depends(get_current_user)):
     }
 
 
+def _resolve_chat_model_or_503(agent, model_id: str | None):
+    """Resolve the model for a chat request, translating a resolution failure
+    into a 503 an operator can act on.
+
+    `resolve_only` can raise `AIError` for reasons that have nothing to do with
+    a database outage (no model configured, the requested model not
+    authorized, ...), but it can also surface a `ConfigStore` failure — and
+    with PostgreSQL down this is the one call on the request path most likely
+    to hit that. Before AI provider configuration existed the agent talked to
+    Ollama directly, so a database outage never touched chat at all; letting
+    this raise unhandled here would turn that into an unstyled 500 and a real
+    regression. 503 (not 500) tells a caller — and a monitoring dashboard —
+    that the service is transiently unavailable, not broken.
+    """
+    from ai.errors import AIError
+    from ai.types import Purpose
+    try:
+        return agent.manager.resolve_only(
+            tenant_id="default", purpose=Purpose.CHAT, requested_model_id=model_id
+        )
+    except AIError as exc:
+        _logger.warning("Model resolution failed for chat: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No AI model could be resolved right now. This usually means the "
+                "AI configuration database is unreachable or no chat model is "
+                "configured yet. Contact your administrator; this is not caused "
+                "by your request."
+            ),
+        )
+
+
 # ── Core chat endpoint ─────────────────────────────────────────────────────────
 
 @app.post("/chat", response_model=ChatResponse)
@@ -697,10 +740,7 @@ async def chat(
     import asyncio as _aio
     agent = await _aio.to_thread(_get_agent, agent_session_id)
     agent.requested_model_id = body.model_id
-    from ai.types import Purpose
-    resolution = agent.manager.resolve_only(
-        tenant_id="default", purpose=Purpose.CHAT, requested_model_id=body.model_id
-    )
+    resolution = _resolve_chat_model_or_503(agent, body.model_id)
     resolved_model_id = resolution.resolved.model.id
 
     # ── Cache lookup (per-user; skipped for clarification follow-ups) ──
@@ -951,10 +991,7 @@ async def chat_stream(
     agent_session_id = f"{user_id}:{body.session_id}"
     agent = await asyncio.to_thread(_get_agent, agent_session_id)
     agent.requested_model_id = body.model_id
-    from ai.types import Purpose
-    resolution = agent.manager.resolve_only(
-        tenant_id="default", purpose=Purpose.CHAT, requested_model_id=body.model_id
-    )
+    resolution = _resolve_chat_model_or_503(agent, body.model_id)
     resolved_model_id = resolution.resolved.model.id
 
     allowed_tools = get_allowed_tools(user_roles) if _AUTH_ENABLED else None

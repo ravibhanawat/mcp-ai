@@ -23,9 +23,9 @@ _logger = logging.getLogger("ai.credentials")
 UNCHANGED_SENTINEL = "••••••••"
 
 
-def _execute(sql: str, params: tuple) -> int:
+def _execute(sql: str, params: tuple, conn=None) -> int:
     from db.connection import execute
-    return execute(sql, params)
+    return execute(sql, params, conn=conn)
 
 
 def _query_one(sql: str, params: tuple) -> dict | None:
@@ -38,8 +38,25 @@ def is_unchanged(value: str | None) -> bool:
     return value == UNCHANGED_SENTINEL
 
 
-def store_credential(provider_id: str, tenant_id: str, api_key: str) -> None:
-    """Encrypt and persist a provider credential, replacing any existing one."""
+def store_credential(provider_id: str, tenant_id: str, api_key: str, conn=None) -> None:
+    """Encrypt and persist a provider credential, replacing any existing one.
+
+    `provider_id` alone is the table's primary key (ai_provider_credentials
+    has no composite key), so the ON CONFLICT target can only be `provider_id`
+    — but its DO UPDATE is additionally guarded by a `WHERE tenant_id =
+    EXCLUDED.tenant_id`. Without that guard, a write carrying a *different*
+    tenant_id than the row already stored would still match on provider_id and
+    overwrite the ciphertext while leaving tenant_id untouched — replacing one
+    tenant's credential with another tenant's key under the original tenant's
+    name. With the guard, a cross-tenant write for an existing provider_id is
+    silently a no-op (0 rows affected), the same shape ai.credentials.
+    delete_credential already uses via its own tenant-scoped WHERE clause.
+
+    `conn`, when given, runs on that connection rather than a fresh pooled
+    one — ai.seed uses this so a newly-seeded provider's credential commits
+    atomically with the provider row it references (a foreign key), which
+    would otherwise not yet be visible to a separate connection.
+    """
     try:
         ciphertext, version = get_secret_box().encrypt(api_key)
     except MissingKeyError as exc:
@@ -53,8 +70,10 @@ def store_credential(provider_id: str, tenant_id: str, api_key: str) -> None:
                ciphertext  = EXCLUDED.ciphertext,
                key_version = EXCLUDED.key_version,
                last4       = EXCLUDED.last4,
-               rotated_at  = NOW()""",
+               rotated_at  = NOW()
+           WHERE ai_provider_credentials.tenant_id = EXCLUDED.tenant_id""",
         (provider_id, tenant_id, ciphertext, version, last4(api_key)),
+        conn=conn,
     )
 
 

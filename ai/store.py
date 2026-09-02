@@ -290,7 +290,15 @@ class PostgresConfigStore(ConfigStore):
 # ── Snapshot ──────────────────────────────────────────────────────────────────
 
 def snapshot_payload(store: ConfigStore, tenant_id: str = DEFAULT_TENANT) -> dict:
-    """Serialize the active configuration, credentials excluded."""
+    """Serialize the active configuration, credentials excluded.
+
+    Every rule_type is enumerated with no match_key filter, which
+    `get_routing_rules` treats as "all rows of this type" — so this captures
+    every purpose rule, every intent rule and every fallback chain, not just
+    the ones snapshot_payload happens to already know the match_key for. A
+    system running from this snapshot must be able to reproduce the same
+    routing and failover decisions the live database would have made.
+    """
     return {
         "tenant_id": tenant_id,
         "providers": [
@@ -314,6 +322,15 @@ def snapshot_payload(store: ConfigStore, tenant_id: str = DEFAULT_TENANT) -> dic
                 "capabilities": sorted(c.value for c in store.get_capabilities(m.id, tenant_id)),
             }
             for m in store.list_models(tenant_id, active_only=False)
+        ],
+        "routing_rules": [
+            {
+                "id": r.id, "tenant_id": r.tenant_id, "rule_type": r.rule_type,
+                "match_key": r.match_key, "model_id": r.model_id,
+                "priority": r.priority, "is_active": r.is_active,
+            }
+            for rule_type in ("purpose", "intent", "fallback")
+            for r in store.get_routing_rules(tenant_id, rule_type)
         ],
         "policy": store.get_policy(tenant_id).__dict__,
     }
@@ -351,9 +368,38 @@ _store: ConfigStore | None = None
 
 
 def get_store() -> ConfigStore:
+    """Return the process-wide config store, falling back to a read-only
+    snapshot when PostgreSQL cannot be reached.
+
+    Before this branch the agent talked to Ollama directly, so a database
+    outage never touched chat. Now every dispatch resolves a model through
+    this store, which would make a boot-time database outage a regression
+    rather than the resilience improvement it is meant to be — unless the
+    fallback below actually runs. `PostgresConfigStore()` itself never touches
+    the network (the cache is empty and lazy), so a real read is forced here
+    to prove connectivity before committing to it.
+
+    The result — Postgres-backed or snapshot-backed — is cached in `_store`
+    for the lifetime of the process, so a database outage detected at boot is
+    diagnosed exactly once, never retried per request.
+    """
     global _store
-    if _store is None:
-        _store = PostgresConfigStore()
+    if _store is not None:
+        return _store
+    candidate = PostgresConfigStore()
+    try:
+        candidate.list_providers(DEFAULT_TENANT)
+    except Exception as exc:
+        _logger.warning(
+            "PostgreSQL unreachable at boot (%s); falling back to the read-only "
+            "config.json snapshot so conversational traffic can still resolve a "
+            "model. Admin writes and policy changes will not take effect until "
+            "PostgreSQL is restored and the process is restarted.",
+            exc,
+        )
+        _store = snapshot_to_store(load_snapshot() or {})
+    else:
+        _store = candidate
     return _store
 
 

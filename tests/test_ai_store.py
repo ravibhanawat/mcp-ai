@@ -3,9 +3,15 @@ implementation and a stubbed clock; the Postgres implementation is exercised in
 tests/test_ai_admin_api.py, which needs a database anyway."""
 import json
 import unittest
+from unittest.mock import patch
 
 from ai.types import Capability, Purpose
-from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+from tests.fakes.fake_store import (
+    InMemoryConfigStore,
+    make_model_row,
+    make_provider_row,
+    make_rule,
+)
 
 
 class TestInMemoryStoreContract(unittest.TestCase):
@@ -98,6 +104,125 @@ class TestSnapshot(unittest.TestCase):
         restored = snapshot_to_store(payload)
         self.assertEqual("m1", restored.get_model("m1", "default").id)
         self.assertEqual("Local", restored.get_provider("p1", "default").name)
+
+    def test_snapshot_roundtrips_routing_rules_and_fallback_chains(self):
+        """A system running from the snapshot must reproduce the same routing
+        and failover decisions the live database would have made — losing
+        these rows would silently drop every purpose/intent rule and fallback
+        chain during an outage."""
+        from ai.store import snapshot_payload, snapshot_to_store
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", name="Local"))
+        store.add_model(
+            make_model_row(id="m1", provider_id="p1", purpose=Purpose.CHAT),
+            capabilities={Capability.CHAT},
+        )
+        store.add_model(
+            make_model_row(id="m2", provider_id="p1", purpose=Purpose.CHAT),
+            capabilities={Capability.CHAT},
+        )
+        store.add_rule(make_rule(
+            id="r1", rule_type="purpose", match_key="CHAT", model_id="m1", priority=0,
+        ))
+        store.add_rule(make_rule(
+            id="r2", rule_type="intent", match_key="complex_reasoning", model_id="m1", priority=0,
+        ))
+        store.add_rule(make_rule(
+            id="r3", rule_type="fallback", match_key="CHAT", model_id="m2", priority=0,
+        ))
+
+        payload = snapshot_payload(store, "default")
+        self.assertEqual(3, len(payload["routing_rules"]))
+
+        restored = snapshot_to_store(payload)
+        self.assertEqual(
+            ["m1"],
+            [r.model_id for r in restored.get_routing_rules("default", "purpose", "CHAT")],
+        )
+        self.assertEqual(
+            ["m1"],
+            [r.model_id for r in restored.get_routing_rules("default", "intent", "complex_reasoning")],
+        )
+        self.assertEqual(
+            ["m2"],
+            [r.model_id for r in restored.get_routing_rules("default", "fallback", "CHAT")],
+        )
+
+
+class TestGetStoreFallback(unittest.TestCase):
+    """The promise in ai/store.py's own module docstring: if PostgreSQL is
+    unreachable at boot, get_store() falls back to the read-only config.json
+    snapshot so conversational traffic still resolves a model, instead of
+    every caller getting a PostgresConfigStore that blows up on first use.
+
+    Before this fix, get_store() unconditionally returned PostgresConfigStore()
+    with no probe and no fallback — this class fails without the fix in
+    ai.store.get_store() (verified: reverting it reproduces a store that raises
+    on first real read rather than one backed by the snapshot)."""
+
+    def setUp(self):
+        import ai.store as store_module
+        self._store_module = store_module
+        self._saved_store = store_module._store
+        store_module._store = None
+
+    def tearDown(self):
+        self._store_module._store = self._saved_store
+
+    def test_falls_back_to_the_snapshot_when_postgres_is_unreachable(self):
+        import ai.store as store_module
+
+        snapshot = {
+            "tenant_id": "default",
+            "providers": [{
+                "id": "p1", "tenant_id": "default", "name": "Snapshot Provider",
+                "provider_type": "OLLAMA", "base_url": "http://localhost:11434",
+                "organization_id": None, "deployment_name": None,
+                "timeout_seconds": 30, "max_retries": 2, "egress_class": "local",
+                "sap_data_permitted": False, "is_active": True,
+            }],
+            "models": [], "routing_rules": [],
+            "policy": {
+                "tenant_id": "default", "allow_user_selection": False,
+                "fallback_enabled": True, "default_chat_model_id": None,
+                "default_embedding_model_id": None, "default_reranker_model_id": None,
+            },
+        }
+
+        with patch.object(
+            store_module.PostgresConfigStore, "list_providers",
+            side_effect=RuntimeError("connection refused"),
+        ), patch.object(store_module, "load_snapshot", return_value=snapshot):
+            result = store_module.get_store()
+
+        # Must actually be serving the snapshot's content, not merely some
+        # store instance that happened not to raise on this one call.
+        self.assertEqual("Snapshot Provider", result.get_provider("p1", "default").name)
+        self.assertNotIsInstance(result, store_module.PostgresConfigStore)
+
+    def test_fallback_is_cached_not_retried_per_request(self):
+        import ai.store as store_module
+
+        calls = {"n": 0}
+
+        def _boom(*a, **kw):
+            calls["n"] += 1
+            raise RuntimeError("connection refused")
+
+        with patch.object(store_module.PostgresConfigStore, "list_providers", side_effect=_boom), \
+             patch.object(store_module, "load_snapshot", return_value={}):
+            first = store_module.get_store()
+            second = store_module.get_store()
+
+        self.assertIs(first, second)
+        self.assertEqual(1, calls["n"], "the probe read must run once, not per get_store() call")
+
+    def test_postgres_is_used_when_reachable(self):
+        import ai.store as store_module
+        with patch.object(store_module.PostgresConfigStore, "list_providers", return_value=[]):
+            result = store_module.get_store()
+        self.assertIsInstance(result, store_module.PostgresConfigStore)
 
 
 if __name__ == "__main__":

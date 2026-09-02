@@ -100,7 +100,12 @@ class AutonomousAgent:
             context = self._build_context(query, collected_data, tool_call_log)
             plan_response = self._call_llm([
                 {"role": "system", "content": planner_prompt},
-                {"role": "user",   "content": context},
+                # `context` embeds json.dumps(...) of raw SAP tool results
+                # (see _build_context). It carries no "SAP tool '...' returned:"
+                # prefix, so core.security.sanitize_sap_payload cannot see it
+                # without this structural marker — mark it explicitly rather
+                # than relying on a string shape this method never produces.
+                {"role": "user",   "content": context, "sap_payload": True},
             ])
 
             decision = self._parse_decision(plan_response)
@@ -261,7 +266,9 @@ class AutonomousAgent:
         )
         return self._call_llm([
             {"role": "system", "content": "You are a senior SAP business consultant providing enterprise-grade analysis."},
-            {"role": "user",   "content": reasoner_prompt},
+            # reasoner_prompt embeds json.dumps(...) of every collected tool
+            # result — see the marker note on the planner call above.
+            {"role": "user",   "content": reasoner_prompt, "sap_payload": True},
         ])
 
     def _format_report(

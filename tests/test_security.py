@@ -161,6 +161,35 @@ class TestSanitizeSapPayload(unittest.TestCase):
         sanitize_sap_payload(messages)
         self.assertIn("\"a\": 1", messages[0]["content"])
 
+    def test_a_marked_message_is_redacted_even_without_the_prefix_shape(self):
+        """agent.autonomous_agent and agent.report_agent embed raw tool-result
+        JSON into a larger prompt with no 'SAP tool ... returned:' prefix —
+        the structural sap_payload marker is the only thing that can catch
+        that shape."""
+        from core.security import sanitize_sap_payload
+        messages = [{
+            "role": "system",
+            "content": "COLLECTED DATA SUMMARY:\n[get_payslip]: {\"salary\": 4200000}",
+            "sap_payload": True,
+        }]
+        out = sanitize_sap_payload(messages)
+        self.assertNotIn("4200000", out[0]["content"])
+        self.assertIn("redacted", out[0]["content"].lower())
+
+    def test_the_marker_never_survives_into_the_sanitized_output(self):
+        """The marker is not a real message field; a caller that forgot to
+        strip it must not have it forwarded to a provider by accident."""
+        from core.security import sanitize_sap_payload
+        messages = [{"role": "user", "content": "salary is 4200000", "sap_payload": True}]
+        out = sanitize_sap_payload(messages)
+        self.assertNotIn("sap_payload", out[0])
+
+    def test_an_unmarked_message_without_the_prefix_is_left_alone(self):
+        from core.security import sanitize_sap_payload
+        messages = [{"role": "user", "content": "what is MIGO?", "sap_payload": False}]
+        out = sanitize_sap_payload(messages)
+        self.assertEqual("what is MIGO?", out[0]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()
