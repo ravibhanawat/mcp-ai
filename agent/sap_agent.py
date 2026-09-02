@@ -322,6 +322,32 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         )
         return response.content
 
+    def _call_llm_stream(
+        self,
+        messages: list[dict],
+        *,
+        purpose: "Purpose | None" = None,
+        carries_sap_data: bool = False,
+        request_id: str | None = None,
+    ):
+        """Async generator of token strings from the configured chat model.
+
+        No failover: a stream that changed models mid-answer would show the user
+        two partial replies stitched together. When the configured model cannot
+        stream the manager raises CapabilityUnsupported and the caller falls back
+        to a single non-streaming call.
+        """
+        from ai.types import Purpose as _Purpose
+        return self.manager.stream(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            purpose=purpose or _Purpose.CHAT,
+            messages=messages,
+            carries_sap_data=carries_sap_data,
+            local_only=self.local_only,
+            request_id=request_id,
+        )
+
     @staticmethod
     def _sanitize_for_cloud(messages: list[dict]) -> list[dict]:
         """Deprecated: delegates to core.security.sanitize_sap_payload.
@@ -966,21 +992,38 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             {"role": "user", "content": response_prompt},
         ]
 
+        from ai.errors import CapabilityUnsupported
         try:
-            # Use non-streaming LLM call and yield result in chunks for compatibility
-            llm_response = await asyncio.to_thread(
-                self._call_llm, messages, carries_sap_data=True
-            )
-            # Detect JSON output
-            stripped = llm_response.strip()
-            if stripped.startswith(("{", "[", "```")):
-                yield self._friendly_fallback(tool_name, tool_result)
-            else:
-                # Yield the response in small chunks for streaming effect
-                chunk_size = 20
-                for i in range(0, len(llm_response), chunk_size):
-                    yield llm_response[i:i + chunk_size]
-                    await asyncio.sleep(0)  # Yield control to event loop
+            # Buffer the first ~20 chars to detect JSON output
+            buffer = []
+            first_chunk_peeked = False
+            async for token in self._call_llm_stream(messages, carries_sap_data=True):
+                if not first_chunk_peeked:
+                    buffer.append(token)
+                    if len("".join(buffer)) >= 20:
+                        first_chunk_peeked = True
+                        peeked = "".join(buffer).strip()
+                        if peeked.startswith(("{", "[", "```")):
+                            # Model returned JSON; fall back to friendly format
+                            yield self._friendly_fallback(tool_name, tool_result)
+                            return
+                        # Yield all buffered tokens
+                        for buffered_token in buffer:
+                            yield buffered_token
+                        buffer = []
+                else:
+                    yield token
+            # Yield any remaining buffered tokens if stream ended before ~20 chars
+            if buffer:
+                peeked = "".join(buffer).strip()
+                if peeked.startswith(("{", "[", "```")):
+                    yield self._friendly_fallback(tool_name, tool_result)
+                else:
+                    for token in buffer:
+                        yield token
+        except CapabilityUnsupported:
+            # Configured model has no streaming capability: answer in one piece.
+            yield self._format_tool_response(user_message, tool_name, tool_result)
         except Exception:
             yield self._friendly_fallback(tool_name, tool_result)
 
