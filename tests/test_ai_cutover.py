@@ -300,5 +300,69 @@ class TestRequestedModelIdThreading(unittest.TestCase):
         )
 
 
+class TestResolveChatModelOr503(unittest.TestCase):
+    """C1's residual: get_store()'s boot-time reachability probe only proves
+    PostgreSQL was up at process start. A database outage that begins AFTER
+    that -- once the store's 30s cache expires -- surfaces from resolve_only
+    as a raw driver exception (psycopg.OperationalError, PoolTimeout, ...),
+    which is not an AIError. api.server._resolve_chat_model_or_503 must
+    still answer 503, not let that propagate into an unhandled 500 -- the
+    exact regression Critical 1 exists to remove."""
+
+    def test_an_ai_error_becomes_a_503_with_its_specific_message(self):
+        from unittest.mock import MagicMock
+        from fastapi import HTTPException
+        from api.server import _resolve_chat_model_or_503
+        from ai.errors import NoModelConfigured
+
+        agent = MagicMock()
+        agent.manager.resolve_only.side_effect = NoModelConfigured("no chat model configured")
+
+        with self.assertRaises(HTTPException) as ctx:
+            _resolve_chat_model_or_503(agent, None)
+        self.assertEqual(503, ctx.exception.status_code)
+        self.assertIn("AI model", ctx.exception.detail)
+
+    def test_an_unexpected_exception_becomes_a_503_not_a_500(self):
+        """The regression: resolve_only can also surface a raw ConfigStore
+        failure that is not an AIError at all -- a post-boot database outage
+        being the realistic case. That must still be a 503, never a 500."""
+        from unittest.mock import MagicMock
+        from fastapi import HTTPException
+        from api.server import _resolve_chat_model_or_503
+
+        agent = MagicMock()
+        agent.manager.resolve_only.side_effect = RuntimeError(
+            "simulated psycopg.OperationalError: connection lost"
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            _resolve_chat_model_or_503(agent, None)
+        self.assertEqual(503, ctx.exception.status_code)
+        self.assertNotEqual(500, ctx.exception.status_code)
+
+
+class TestReportAgentPlannerDoesNotClaimSapData(unittest.TestCase):
+    """Minor, alongside the C2 fix: agent.report_agent._plan's messages (the
+    tool registry plus the user's query text) carry no SAP data -- no tool
+    has been called yet at this point in the pipeline -- but _call_llm
+    previously hardcoded carries_sap_data=True for every call, including this
+    one. Against an external provider that tripped the manager's
+    redaction-fail-closed WARNING on every single report generated, diluting
+    the exact signal a genuine leak should raise."""
+
+    def test_plan_dispatches_with_carries_sap_data_false(self):
+        from unittest.mock import MagicMock
+        from agent.report_agent import LLMReportAgent
+
+        manager = MagicMock()
+        manager.chat.return_value.content = '{"steps": [], "chart_type": "bar"}'
+        agent = LLMReportAgent(manager=manager, tenant_id="default")
+        agent._plan("show me overdue invoices")
+
+        self.assertEqual(1, manager.chat.call_count)
+        self.assertFalse(manager.chat.call_args.kwargs.get("carries_sap_data"))
+
+
 if __name__ == "__main__":
     unittest.main()

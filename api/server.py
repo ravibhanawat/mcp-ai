@@ -695,6 +695,18 @@ def _resolve_chat_model_or_503(agent, model_id: str | None):
     this raise unhandled here would turn that into an unstyled 500 and a real
     regression. 503 (not 500) tells a caller — and a monitoring dashboard —
     that the service is transiently unavailable, not broken.
+
+    Two failure shapes, two branches: `AIError` is a configuration-layer
+    decision (no model, unauthorized, capability gap) and gets its specific,
+    actionable message. Everything else — `psycopg.OperationalError`,
+    `psycopg_pool.PoolTimeout`, or any other exception `resolve_only` did not
+    wrap — is an unexpected failure of the ConfigStore itself. `get_store()`'s
+    boot-time probe only proves PostgreSQL was reachable at process start; an
+    outage that begins later, once the store's 30s cache expires, raises a
+    raw driver exception here, on the request path, not at boot. Both
+    branches still answer 503, not 500 — the caller only needs to know
+    "try again later", and an operator gets the exception type at ERROR to
+    tell a misconfiguration from a genuine outage.
     """
     from ai.errors import AIError
     from ai.types import Purpose
@@ -711,6 +723,20 @@ def _resolve_chat_model_or_503(agent, model_id: str | None):
                 "AI configuration database is unreachable or no chat model is "
                 "configured yet. Contact your administrator; this is not caused "
                 "by your request."
+            ),
+        )
+    except Exception as exc:
+        _logger.error(
+            "Unexpected error resolving the chat model (%s: %s). Treating as a "
+            "configuration store outage rather than letting it 500.",
+            type(exc).__name__, exc,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The AI configuration store is temporarily unavailable. This is "
+                "usually a database connectivity issue; contact your "
+                "administrator if it persists."
             ),
         )
 

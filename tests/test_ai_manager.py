@@ -162,6 +162,62 @@ class TestEgress(ManagerTestCase):
         self.assertNotIn("ACC-9911", sent)
         self.assertTrue(logged.call_args[0][0].redaction_applied)
 
+    def test_sap_agent_real_tool_response_prompt_is_redacted_externally(self):
+        """The whole-branch review's own C2 finding, closed the wrong way
+        once already: every redaction test in this repository — including
+        the two above — asserts against a HAND-AUTHORED message shape. That
+        is exactly how the real bug survived two full reviews.
+        SAPAgent._format_tool_response (agent/sap_agent.py) builds:
+            'The user asked: "..."\n\nSAP tool 'X' returned this data:\n{...}'
+        which matches NEITHER half of the original prefix predicate — it does
+        not start with "SAP tool '" (it starts with "The user asked:"), and
+        "returned this data:" does not contain the substring "returned:".
+        This drives the REAL agent method end to end rather than a message
+        this test wrote, so it cannot pass by construction."""
+        from agent.sap_agent import SAPAgent
+
+        with FakeProviderServer(mode="ok") as s:
+            manager = self.build(s.base_url, egress_class="external", sap_data_permitted=False)
+            agent = SAPAgent(manager=manager, tenant_id="default")
+            with patch("ai.manager.log_usage") as logged, \
+                 patch("ai.credentials.read_credential", return_value=None):
+                agent._format_tool_response(
+                    user_message="What is Priya's salary?",
+                    tool_name="get_payslip",
+                    tool_result={"salary": 4200000, "account": "ACC-9911", "employee": "Priya"},
+                )
+        sent = json.dumps(s.requests[-1])
+        self.assertNotIn("4200000", sent)
+        self.assertNotIn("ACC-9911", sent)
+        self.assertTrue(logged.call_args[0][0].redaction_applied)
+
+    def test_sap_agent_real_streaming_tool_response_prompt_is_redacted_externally(self):
+        """Same defect, streaming path: _format_tool_response_stream builds
+        the identical prompt shape and dispatches through manager.stream()."""
+        import asyncio
+        from agent.sap_agent import SAPAgent
+
+        with FakeProviderServer(mode="ok", reply_text="a plain-text summary") as s:
+            manager = self.build(s.base_url, egress_class="external", sap_data_permitted=False)
+            agent = SAPAgent(manager=manager, tenant_id="default")
+
+            async def _drain():
+                chunks = []
+                async for chunk in agent._format_tool_response_stream(
+                    user_message="What is Priya's salary?",
+                    tool_name="get_payslip",
+                    tool_result={"salary": 4200000, "account": "ACC-9911", "employee": "Priya"},
+                ):
+                    chunks.append(chunk)
+                return chunks
+
+            with patch("ai.manager.log_usage"), \
+                 patch("ai.credentials.read_credential", return_value=None):
+                asyncio.run(_drain())
+        sent = json.dumps(s.requests[-1])
+        self.assertNotIn("4200000", sent)
+        self.assertNotIn("ACC-9911", sent)
+
     def test_carries_sap_data_false_means_no_redaction_even_externally(self):
         with FakeProviderServer(mode="ok") as s:
             with patch("ai.manager.log_usage"), patch("ai.credentials.read_credential", return_value=None):

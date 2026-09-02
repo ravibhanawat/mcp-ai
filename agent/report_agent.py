@@ -227,10 +227,17 @@ class LLMReportAgent:
             tools_json=tools_json,
             max_tools=MAX_TOOL_CALLS,
         )
+        # The planner prompt carries the tool registry and the user's query —
+        # no SAP tool result has been fetched yet at this point in the
+        # pipeline, so there is nothing here for redaction to protect.
+        # Defaulting to carries_sap_data=True (as _format still does, below)
+        # would trip the manager's redaction-fail-closed WARNING on every
+        # single report generated against an external provider, diluting the
+        # exact signal that should be reserved for a genuine leak.
         response = self._call_llm([
             {"role": "system", "content": prompt},
             {"role": "user",   "content": f"Generate a report for: {query}"},
-        ])
+        ], carries_sap_data=False)
         return self._parse_json(response)
 
     # ── Pass 2: Formatter ─────────────────────────────────────────────────────
@@ -352,13 +359,13 @@ class LLMReportAgent:
 
     # ── LLM helpers ───────────────────────────────────────────────────────────
 
-    def _call_llm(self, messages: list[dict]) -> str:
+    def _call_llm(self, messages: list[dict], *, carries_sap_data: bool = True) -> str:
         from ai.types import Capability, Purpose
         try:
             response = self.manager.chat(
                 tenant_id=self.tenant_id, user_id=self.user_id,
                 purpose=Purpose.SUMMARIZATION, intent="report_generation",
-                messages=messages, carries_sap_data=True,
+                messages=messages, carries_sap_data=carries_sap_data,
                 required=frozenset({Capability.CHAT}),
             )
             return response.content

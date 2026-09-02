@@ -669,7 +669,16 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         )
         messages = [
             {"role": "system", "content": "You are a professional SAP enterprise assistant. Format data clearly and provide business insights. Never output raw JSON."},
-            {"role": "user", "content": response_prompt},
+            # response_prompt embeds the raw tool_result JSON but does not
+            # match core.security.sanitize_sap_payload's "SAP tool '...'
+            # returned:" prefix predicate (this reads "returned this data:",
+            # and the message starts with "The user asked:", not "SAP tool").
+            # That gap meant redaction was a no-op on this, the primary chat
+            # path, for every branch of this codebase's history. Marked
+            # structurally instead of widening the string match, which would
+            # only recreate the same fragility the next time this prompt's
+            # wording changes.
+            {"role": "user", "content": response_prompt, "sap_payload": True},
         ]
         try:
             llm_response = self._call_llm(messages, carries_sap_data=True)
@@ -876,7 +885,16 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         )
         messages = [
             {"role": "system", "content": "You are a professional SAP enterprise assistant. Format data clearly and provide business insights. Never output raw JSON."},
-            {"role": "user", "content": response_prompt},
+            # response_prompt embeds the raw tool_result JSON but does not
+            # match core.security.sanitize_sap_payload's "SAP tool '...'
+            # returned:" prefix predicate (this reads "returned this data:",
+            # and the message starts with "The user asked:", not "SAP tool").
+            # That gap meant redaction was a no-op on this, the primary chat
+            # path, for every branch of this codebase's history. Marked
+            # structurally instead of widening the string match, which would
+            # only recreate the same fragility the next time this prompt's
+            # wording changes.
+            {"role": "user", "content": response_prompt, "sap_payload": True},
         ]
 
         from ai.errors import CapabilityUnsupported
