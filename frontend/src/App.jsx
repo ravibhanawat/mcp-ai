@@ -1711,14 +1711,19 @@ function SettingsModal({ onClose, currentUser }) {
 
           {/* Ollama / LLM */}
           {tab === 'ollama' && <>
+            <div className="form-warning">
+              These settings have moved to <strong>AI Configuration</strong>, where you can
+              register any provider — not only Ollama — and route different tasks to
+              different models. This tab is read-only and will be removed in the next release.
+            </div>
             <div className="form-group">
               <label className="form-label">Ollama Server URL</label>
-              <input className="form-input mono" value={cfg.ollama?.url || ''} onChange={e => setOllama('url', e.target.value)} placeholder="http://localhost:11434" />
+              <input className="form-input mono" disabled value={cfg.ollama?.url || ''} onChange={e => setOllama('url', e.target.value)} placeholder="http://localhost:11434" />
               <span className="form-hint">Bind Ollama to <code style={{ fontFamily: 'var(--font-mono)' }}>127.0.0.1</code> only — never expose publicly.</span>
             </div>
             <div className="form-group">
               <label className="form-label">Default Model</label>
-              <select className="form-select" value={cfg.ollama?.default_model || 'llama3.2'} onChange={e => setOllama('default_model', e.target.value)}>
+              <select className="form-select" disabled value={cfg.ollama?.default_model || 'llama3.2'} onChange={e => setOllama('default_model', e.target.value)}>
                 {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
               <span className="form-hint">Pull before use: <code style={{ fontFamily: 'var(--font-mono)' }}>ollama pull llama3.2</code></span>
