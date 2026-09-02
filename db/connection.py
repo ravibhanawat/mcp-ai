@@ -60,6 +60,19 @@ def _conninfo() -> str:
     )
 
 
+def conninfo() -> str:
+    """Public accessor for the libpq connection string.
+
+    _conninfo() builds it from DATABASE_URL or the individual DB_* env vars;
+    this is the one place outside this module that should ever need it (a
+    boot-time reachability probe that must NOT go through the shared pool,
+    since the pool's own acquire timeout is 30s — far too patient for a check
+    whose only job is to fail fast). Exists so a caller never has to duplicate
+    the DSN-building logic above.
+    """
+    return _conninfo()
+
+
 # ── Sync connection pool ───────────────────────────────────────────────────────
 
 _pool: ConnectionPool | None = None

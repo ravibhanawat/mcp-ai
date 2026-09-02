@@ -159,7 +159,17 @@ class TestGetStoreFallback(unittest.TestCase):
     Before this fix, get_store() unconditionally returned PostgresConfigStore()
     with no probe and no fallback — this class fails without the fix in
     ai.store.get_store() (verified: reverting it reproduces a store that raises
-    on first real read rather than one backed by the snapshot)."""
+    on first real read rather than one backed by the snapshot).
+
+    The probe itself (ai.store._postgres_reachable) is patched here rather
+    than PostgresConfigStore.list_providers: get_store() no longer calls
+    list_providers at all to decide reachability (that read went through the
+    shared pool, which pays a 30s acquire timeout when the database is down —
+    turning every test in this class, and every test anywhere that resets the
+    store, into a 30s stall; see tests/test_ai_admin_api.py's history for the
+    consequence). _postgres_reachable opens one short-lived connection outside
+    the pool with its own short connect_timeout instead. See
+    TestPostgresReachableProbe below for coverage of that function itself."""
 
     def setUp(self):
         import ai.store as store_module
@@ -190,10 +200,8 @@ class TestGetStoreFallback(unittest.TestCase):
             },
         }
 
-        with patch.object(
-            store_module.PostgresConfigStore, "list_providers",
-            side_effect=RuntimeError("connection refused"),
-        ), patch.object(store_module, "load_snapshot", return_value=snapshot):
+        with patch.object(store_module, "_postgres_reachable", return_value=False), \
+             patch.object(store_module, "load_snapshot", return_value=snapshot):
             result = store_module.get_store()
 
         # Must actually be serving the snapshot's content, not merely some
@@ -206,23 +214,74 @@ class TestGetStoreFallback(unittest.TestCase):
 
         calls = {"n": 0}
 
-        def _boom(*a, **kw):
+        def _unreachable(*a, **kw):
             calls["n"] += 1
-            raise RuntimeError("connection refused")
+            return False
 
-        with patch.object(store_module.PostgresConfigStore, "list_providers", side_effect=_boom), \
+        with patch.object(store_module, "_postgres_reachable", side_effect=_unreachable), \
              patch.object(store_module, "load_snapshot", return_value={}):
             first = store_module.get_store()
             second = store_module.get_store()
 
         self.assertIs(first, second)
-        self.assertEqual(1, calls["n"], "the probe read must run once, not per get_store() call")
+        self.assertEqual(1, calls["n"], "the probe must run once, not per get_store() call")
 
     def test_postgres_is_used_when_reachable(self):
         import ai.store as store_module
-        with patch.object(store_module.PostgresConfigStore, "list_providers", return_value=[]):
+        with patch.object(store_module, "_postgres_reachable", return_value=True):
             result = store_module.get_store()
         self.assertIsInstance(result, store_module.PostgresConfigStore)
+
+
+class TestPostgresReachableProbe(unittest.TestCase):
+    """The probe itself: bounded and never raises. This is what makes
+    get_store() (and therefore anything that resets the store, like every
+    test in tests/test_ai_admin_api.py) fail fast instead of paying the
+    shared pool's 30s acquire timeout when Postgres is down."""
+
+    def test_returns_false_and_never_raises_when_connect_raises(self):
+        import ai.store as store_module
+        with patch("psycopg.connect", side_effect=RuntimeError("connection refused")):
+            self.assertFalse(store_module._postgres_reachable(timeout_seconds=1))
+
+    def test_returns_false_and_never_raises_on_a_malformed_dsn(self):
+        """A bad DSN must take the snapshot path exactly like a genuine
+        connection refusal, not crash the caller with a ValueError/OperationalError."""
+        import ai.store as store_module
+        with patch("db.connection.conninfo", return_value="not a valid conninfo @@@"):
+            self.assertFalse(store_module._postgres_reachable(timeout_seconds=1))
+
+    def test_is_bounded_against_an_unreachable_host(self):
+        """The whole point: this must complete in low single-digit seconds,
+        never anywhere near the shared pool's 30s acquire timeout."""
+        import time
+        import ai.store as store_module
+        with patch("db.connection.conninfo",
+                   return_value="host=127.0.0.1 port=5432 connect_timeout=1"):
+            started = time.monotonic()
+            result = store_module._postgres_reachable(timeout_seconds=1)
+            elapsed = time.monotonic() - started
+        self.assertFalse(result)
+        self.assertLess(
+            elapsed, 10,
+            "probe must not pay anything close to the shared pool's 30s acquire timeout",
+        )
+
+    def test_returns_true_when_connect_succeeds(self):
+        import ai.store as store_module
+        from unittest.mock import MagicMock
+
+        fake_cursor = MagicMock()
+        fake_conn = MagicMock()
+        fake_conn.__enter__.return_value = fake_conn
+        fake_conn.__exit__.return_value = False
+        fake_conn.cursor.return_value.__enter__.return_value = fake_cursor
+        fake_conn.cursor.return_value.__exit__.return_value = False
+
+        with patch("psycopg.connect", return_value=fake_conn) as mock_connect:
+            self.assertTrue(store_module._postgres_reachable(timeout_seconds=1))
+        fake_cursor.execute.assert_called_once_with("SELECT 1")
+        mock_connect.assert_called_once()
 
 
 if __name__ == "__main__":
