@@ -311,3 +311,225 @@ def _audit_egress_change(admin: dict, provider_id: str, name: str, permitted: bo
         )
     except Exception:
         _logger.warning("Failed to audit egress policy change.", exc_info=True)
+
+
+# ── models ────────────────────────────────────────────────────────────────────
+
+from ai.capabilities import DEFAULT_CAPABILITIES, probe_capabilities, set_capabilities
+from ai.health import last_health, probe, record_health
+from ai.types import Capability, Purpose, ResolvedModel
+from ai.validation import all_passed, validate
+
+
+def _list_model_rows(tenant_id: str) -> list[dict]:
+    from db.connection import query_all
+    return query_all(
+        "SELECT * FROM ai_models WHERE tenant_id = %s ORDER BY model_name", (tenant_id,)
+    )
+
+
+def _get_model_row(model_id: str, tenant_id: str) -> dict | None:
+    from db.connection import query_one
+    return query_one(
+        "SELECT * FROM ai_models WHERE id = %s AND tenant_id = %s", (model_id, tenant_id)
+    )
+
+
+def _insert_model_row(values: dict) -> str:
+    from db.connection import execute
+    execute(
+        """INSERT INTO ai_models
+               (id, tenant_id, provider_id, model_name, model_identifier, purpose,
+                context_window, max_tokens, temperature, prompt_profile, is_active)
+           VALUES (%(id)s, %(tenant_id)s, %(provider_id)s, %(model_name)s,
+                   %(model_identifier)s, %(purpose)s, %(context_window)s, %(max_tokens)s,
+                   %(temperature)s, %(prompt_profile)s, %(is_active)s)""",
+        values,
+    )
+    return values["id"]
+
+
+def _update_model_row(model_id: str, tenant_id: str, values: dict) -> None:
+    from db.connection import execute
+    assignments = ", ".join(f"{k} = %({k})s" for k in values)
+    execute(
+        f"UPDATE ai_models SET {assignments}, updated_at = NOW() "
+        "WHERE id = %(id)s AND tenant_id = %(tenant_id)s",
+        {**values, "id": model_id, "tenant_id": tenant_id},
+    )
+
+
+def _set_model_active(model_id: str, tenant_id: str, active: bool) -> None:
+    from db.connection import execute
+    execute(
+        "UPDATE ai_models SET is_active = %s, updated_at = NOW() "
+        "WHERE id = %s AND tenant_id = %s",
+        (active, model_id, tenant_id),
+    )
+
+
+def _resolved_for(model_id: str, tenant_id: str) -> ResolvedModel | None:
+    return get_store().resolved(model_id, tenant_id)
+
+
+class ModelIn(BaseModel):
+    provider_id: str
+    model_name: str
+    model_identifier: str
+    purpose: Purpose
+    context_window: int = Field(default=8192, ge=1)
+    max_tokens: int = Field(default=1024, ge=1)
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    prompt_profile: str = "registry_tool_json"
+    capabilities: list[str] | None = None
+
+
+class ModelOut(BaseModel):
+    id: str
+    provider_id: str
+    provider_name: str
+    model_name: str
+    model_identifier: str
+    purpose: str
+    context_window: int
+    max_tokens: int
+    temperature: float
+    prompt_profile: str
+    is_active: bool
+    is_default: bool
+    capabilities: list[str]
+    health: dict[str, Any] | None
+
+
+def _model_to_out(row: dict) -> ModelOut:
+    store = get_store()
+    provider = store.get_provider(row["provider_id"], row["tenant_id"])
+    policy = store.get_policy(row["tenant_id"])
+    return ModelOut(
+        id=row["id"], provider_id=row["provider_id"],
+        provider_name=provider.name if provider else "(missing provider)",
+        model_name=row["model_name"], model_identifier=row["model_identifier"],
+        purpose=row["purpose"], context_window=row["context_window"],
+        max_tokens=row["max_tokens"], temperature=float(row["temperature"]),
+        prompt_profile=row["prompt_profile"], is_active=bool(row["is_active"]),
+        is_default=row["id"] in {
+            policy.default_chat_model_id, policy.default_embedding_model_id,
+            policy.default_reranker_model_id,
+        },
+        capabilities=sorted(c.value for c in store.get_capabilities(row["id"], row["tenant_id"])),
+        health=last_health(row["id"], row["tenant_id"]),
+    )
+
+
+@router.get("/models", response_model=list[ModelOut])
+def list_models(admin: dict = Depends(require_admin)):
+    return [_model_to_out(r) for r in _list_model_rows(DEFAULT_TENANT)]
+
+
+@router.post("/models", response_model=ModelOut, status_code=status.HTTP_201_CREATED)
+def create_model(body: ModelIn, admin: dict = Depends(require_admin)):
+    """Always created inactive — activation requires passing validation."""
+    model_id = str(uuid.uuid4())
+    _insert_model_row({
+        "id": model_id, "tenant_id": DEFAULT_TENANT, "provider_id": body.provider_id,
+        "model_name": body.model_name, "model_identifier": body.model_identifier,
+        "purpose": body.purpose.value, "context_window": body.context_window,
+        "max_tokens": body.max_tokens, "temperature": body.temperature,
+        "prompt_profile": body.prompt_profile, "is_active": False,
+    })
+    declared = (
+        {Capability(c) for c in body.capabilities}
+        if body.capabilities is not None
+        else set(DEFAULT_CAPABILITIES.get(body.purpose, {Capability.CHAT}))
+    )
+    set_capabilities(model_id, DEFAULT_TENANT, {c: True for c in declared}, source="declared")
+    _invalidate()
+    return _model_to_out(_get_model_row(model_id, DEFAULT_TENANT))
+
+
+@router.patch("/models/{model_id}", response_model=ModelOut)
+def update_model(model_id: str, body: ModelIn, admin: dict = Depends(require_admin)):
+    if not _get_model_row(model_id, DEFAULT_TENANT):
+        raise HTTPException(404, "Model not found.")
+    _update_model_row(model_id, DEFAULT_TENANT, {
+        "provider_id": body.provider_id, "model_name": body.model_name,
+        "model_identifier": body.model_identifier, "purpose": body.purpose.value,
+        "context_window": body.context_window, "max_tokens": body.max_tokens,
+        "temperature": body.temperature, "prompt_profile": body.prompt_profile,
+    })
+    if body.capabilities is not None:
+        set_capabilities(
+            model_id, DEFAULT_TENANT,
+            {Capability(c): True for c in body.capabilities}, source="declared",
+        )
+    _invalidate()
+    return _model_to_out(_get_model_row(model_id, DEFAULT_TENANT))
+
+
+@router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_model(model_id: str, admin: dict = Depends(require_admin)):
+    from db.connection import execute
+    execute("DELETE FROM ai_models WHERE id = %s AND tenant_id = %s", (model_id, DEFAULT_TENANT))
+    _invalidate()
+
+
+@router.post("/models/{model_id}/validate")
+def validate_model(model_id: str, admin: dict = Depends(require_admin)) -> dict:
+    if not _get_model_row(model_id, DEFAULT_TENANT):
+        raise HTTPException(404, "Model not found.")
+    resolved = _resolved_for(model_id, DEFAULT_TENANT)
+    if resolved is None:
+        raise HTTPException(400, "Model has no reachable provider configuration.")
+    from ai.credentials import read_credential
+    results = validate(resolved, read_credential(resolved.provider.id, DEFAULT_TENANT))
+    return {
+        "all_passed": all_passed(results),
+        "checks": [{"name": r.name, "passed": r.passed, "detail": r.detail} for r in results],
+    }
+
+
+@router.post("/models/{model_id}/activate", response_model=ModelOut)
+def activate_model(model_id: str, admin: dict = Depends(require_admin)):
+    """Refuses activation unless every check passes (requirement 22)."""
+    if not _get_model_row(model_id, DEFAULT_TENANT):
+        raise HTTPException(404, "Model not found.")
+    resolved = _resolved_for(model_id, DEFAULT_TENANT)
+    if resolved is None:
+        raise HTTPException(400, "Model has no reachable provider configuration.")
+    from ai.credentials import read_credential
+    api_key = read_credential(resolved.provider.id, DEFAULT_TENANT)
+    results = validate(resolved, api_key)
+    if not all_passed(results):
+        raise HTTPException(400, {
+            "message": "Model cannot be activated: validation failed.",
+            "checks": [
+                {"name": r.name, "passed": r.passed, "detail": r.detail} for r in results
+            ],
+        })
+    probed = probe_capabilities(resolved, api_key)
+    if probed:
+        set_capabilities(model_id, DEFAULT_TENANT, probed, source="probed")
+    _set_model_active(model_id, DEFAULT_TENANT, True)
+    _invalidate()
+    return _model_to_out(_get_model_row(model_id, DEFAULT_TENANT))
+
+
+@router.post("/models/{model_id}/deactivate", response_model=ModelOut)
+def deactivate_model(model_id: str, admin: dict = Depends(require_admin)):
+    if not _get_model_row(model_id, DEFAULT_TENANT):
+        raise HTTPException(404, "Model not found.")
+    _set_model_active(model_id, DEFAULT_TENANT, False)
+    _invalidate()
+    return _model_to_out(_get_model_row(model_id, DEFAULT_TENANT))
+
+
+@router.post("/models/{model_id}/test")
+def test_model(model_id: str, admin: dict = Depends(require_admin)) -> dict:
+    """Send a real one-token completion and report latency."""
+    resolved = _resolved_for(model_id, DEFAULT_TENANT)
+    if resolved is None:
+        raise HTTPException(404, "Model not found.")
+    from ai.credentials import read_credential
+    result = probe(resolved, read_credential(resolved.provider.id, DEFAULT_TENANT))
+    record_health(model_id, DEFAULT_TENANT, result)
+    return {"status": result.status, "latency_ms": result.latency_ms, "error": result.error}

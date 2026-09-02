@@ -116,5 +116,124 @@ class TestEgressClassification(unittest.TestCase):
         self.assertFalse(ProviderIn(name="x", provider_type="OPENAI").sap_data_permitted)
 
 
+MODEL_ROW = {
+    "id": "m1", "tenant_id": "default", "provider_id": "p1", "model_name": "Chat",
+    "model_identifier": "cfg-identifier", "purpose": "CHAT", "context_window": 8192,
+    "max_tokens": 1024, "temperature": 0.2, "prompt_profile": "registry_tool_json",
+    "is_active": False,
+}
+
+
+class TestModelActivation(unittest.TestCase):
+    """`_model_to_out` reads the config store, so inject an in-memory one —
+    otherwise these tests reach for PostgreSQL and fail for the wrong reason."""
+
+    def setUp(self):
+        from ai.store import set_store
+        from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", name="Local"))
+        store.add_model(make_model_row(id="m1", provider_id="p1"))
+        set_store(store)
+
+    def tearDown(self):
+        from ai.store import set_store
+        set_store(None)
+
+    def test_activation_is_refused_when_a_validation_check_fails(self):
+        """Requirement 22: an invalid configuration must not become active."""
+        from ai.validation import CheckResult
+        failing = [CheckResult("provider_reachable", False, "unreachable")]
+        with patch("api.routes_ai_admin._get_model_row", return_value=MODEL_ROW), \
+             patch("ai.credentials.read_credential", return_value="mock-key"), \
+             patch("api.routes_ai_admin.validate", return_value=failing), \
+             patch("api.routes_ai_admin._set_model_active") as activate:
+            resp = client_as(["admin"]).post("/admin/ai/models/m1/activate")
+        self.assertEqual(400, resp.status_code)
+        activate.assert_not_called()
+        self.assertIn("provider_reachable", json.dumps(resp.json()))
+
+    def test_activation_succeeds_when_every_check_passes(self):
+        from ai.validation import CheckResult
+        passing = [CheckResult("provider_reachable", True, "ok")]
+        with patch("api.routes_ai_admin._get_model_row", return_value=MODEL_ROW), \
+             patch("ai.credentials.read_credential", return_value="mock-key"), \
+             patch("api.routes_ai_admin.validate", return_value=passing), \
+             patch("api.routes_ai_admin.probe_capabilities", return_value=None), \
+             patch("api.routes_ai_admin._set_model_active") as activate, \
+             patch("api.routes_ai_admin._invalidate"):
+            resp = client_as(["admin"]).post("/admin/ai/models/m1/activate")
+        self.assertEqual(200, resp.status_code)
+        activate.assert_called_once_with("m1", "default", True)
+
+    def test_deactivation_needs_no_validation(self):
+        with patch("api.routes_ai_admin._get_model_row", return_value=MODEL_ROW), \
+             patch("api.routes_ai_admin._set_model_active") as deactivate, \
+             patch("api.routes_ai_admin._invalidate"):
+            resp = client_as(["admin"]).post("/admin/ai/models/m1/deactivate")
+        self.assertEqual(200, resp.status_code)
+        deactivate.assert_called_once_with("m1", "default", False)
+
+    def test_validate_returns_every_check_with_its_detail(self):
+        from ai.validation import CheckResult
+        results = [
+            CheckResult("provider_reachable", True, "responded in 12 ms"),
+            CheckResult("model_exists", False, "not offered"),
+        ]
+        with patch("api.routes_ai_admin._get_model_row", return_value=MODEL_ROW), \
+             patch("ai.credentials.read_credential", return_value="mock-key"), \
+             patch("api.routes_ai_admin.validate", return_value=results):
+            resp = client_as(["admin"]).post("/admin/ai/models/m1/validate")
+        body = resp.json()
+        self.assertFalse(body["all_passed"])
+        self.assertEqual(2, len(body["checks"]))
+        self.assertEqual("not offered", body["checks"][1]["detail"])
+
+    def test_non_admin_cannot_activate_a_model(self):
+        self.assertEqual(
+            403, client_as(["sd_analyst"]).post("/admin/ai/models/m1/activate").status_code
+        )
+
+
+class TestModelCreation(unittest.TestCase):
+
+    def setUp(self):
+        from ai.store import set_store
+        from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", name="Local"))
+        store.add_model(make_model_row(id="m1", provider_id="p1"))
+        set_store(store)
+
+    def tearDown(self):
+        from ai.store import set_store
+        set_store(None)
+
+    def test_a_new_model_is_created_inactive(self):
+        """Nothing becomes live without passing validation first."""
+        captured = {}
+        with patch("api.routes_ai_admin._insert_model_row",
+                   side_effect=lambda v: captured.update(v) or v["id"]), \
+             patch("api.routes_ai_admin.set_capabilities"), \
+             patch("api.routes_ai_admin._get_model_row", return_value=MODEL_ROW), \
+             patch("api.routes_ai_admin._invalidate"):
+            resp = client_as(["admin"]).post("/admin/ai/models", json={
+                "provider_id": "p1", "model_name": "Chat",
+                "model_identifier": "whatever-admin-typed", "purpose": "CHAT",
+            })
+        self.assertEqual(201, resp.status_code)
+        self.assertFalse(captured["is_active"])
+        self.assertEqual("whatever-admin-typed", captured["model_identifier"])
+
+    def test_an_unknown_purpose_is_rejected(self):
+        resp = client_as(["admin"]).post("/admin/ai/models", json={
+            "provider_id": "p1", "model_name": "x", "model_identifier": "y",
+            "purpose": "NOT_A_PURPOSE",
+        })
+        self.assertEqual(422, resp.status_code)
+
+
 if __name__ == "__main__":
     unittest.main()
