@@ -32,14 +32,9 @@ Supported SAP Modules:
     )
     parser.add_argument(
         "--model",
-        default="llama3.2",
-        help="Ollama model name (default: llama3.2). Other options: mistral, llama3.1, gemma2"
-    )
-    parser.add_argument(
-        "--ollama-url",
-        default="http://localhost:11434",
-        help="Ollama API URL (default: http://localhost:11434)"
+        default=None,
+        help="Model override (sets requested_model_id)"
     )
 
     args = parser.parse_args()
-    run_cli(model=args.model)
+    run_cli()

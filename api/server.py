@@ -347,27 +347,8 @@ _session_agents: dict[str, SAPAgent] = {}
 _session_order: list[str] = []   # insertion order for eviction
 _session_lock  = Lock()
 
-# Cache MLX availability at startup so _make_agent() never blocks the lock
-# with a slow HTTP probe on every new session creation.
-_MLX_AVAILABLE: bool | None = None
-
-def _check_mlx_once() -> bool:
-    global _MLX_AVAILABLE
-    if _MLX_AVAILABLE is None:
-        try:
-            import requests as _req
-            r = _req.get("http://localhost:8080/v1/models", timeout=2)
-            _MLX_AVAILABLE = r.status_code == 200
-        except Exception:
-            _MLX_AVAILABLE = False
-    return _MLX_AVAILABLE
-
-
 def _make_agent() -> SAPAgent:
-    agent = SAPAgent(model=config.default_model, ollama_url=config.ollama_url)
-    # Override with the cached check so new agents don't re-probe MLX
-    agent._use_mlx = _MLX_AVAILABLE if _MLX_AVAILABLE is not None else agent._use_mlx
-    return agent
+    return SAPAgent(tenant_id="default")
 
 
 def _get_agent(session_id: str) -> SAPAgent:
@@ -1609,11 +1590,7 @@ def root():
 def health():
     # Use a temporary agent to check connectivity without side effects
     _probe = _make_agent()
-    connected = _probe.check_ollama_connection()
-    backend   = "mlx-finetuned" if _probe._use_mlx else "ollama"
-    cloud_fallback = bool(
-        os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
-    )
+    backend_status = _probe.backend_status()
     from db.connection import is_connected as _db_connected
     db_ok = False
     try:
@@ -1623,11 +1600,11 @@ def health():
 
     return {
         "status":          "ok",
-        "backend":         backend,
-        "llm_connected":   connected,
-        "cloud_fallback":  cloud_fallback,
-        "model":           "sap-model-fused (fine-tuned)" if _probe._use_mlx else config.default_model,
-        "ollama_url":      config.ollama_url,
+        "backend":         backend_status.get("provider", "unknown"),
+        "llm_connected":   backend_status.get("connected", False),
+        "model":           backend_status.get("model", "unconfigured"),
+        "model_identifier": backend_status.get("model_identifier", ""),
+        "latency_ms":      backend_status.get("latency_ms"),
         "sap_mode":        config.sap["connection_type"],
         "mcp_builtin":     config.mcp["builtin_enabled"],
         "auth_enabled":    _AUTH_ENABLED,

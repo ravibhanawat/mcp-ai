@@ -108,5 +108,63 @@ class TestBackendStatusNeverRaises(unittest.TestCase):
         self.assertIn("Key rotated", result["detail"])
 
 
+class TestNoHardcodedModelsAfterCutover(unittest.TestCase):
+    """Task 17 asserted this for sap_agent.py alone. All three agents are
+    cut over now, so widen it. api/server.py is deliberately still excluded:
+    its ChatRequest.model default is replaced in Task 22, and Task 27's final
+    grep covers the whole tree."""
+
+    SOURCES = [
+        "agent/sap_agent.py",
+        "agent/autonomous_agent.py",
+        "agent/report_agent.py",
+    ]
+    FORBIDDEN = [
+        r"llama3\.2", r"gemma\d?:", r"gpt-4o", r"claude-[a-z]+-\d",
+        r"localhost:11434", r"localhost:8080",
+    ]
+
+    def test_no_model_identifier_or_backend_url_remains(self):
+        import re
+        for path in self.SOURCES:
+            with open(path, encoding="utf-8") as f:
+                source = f.read()
+            for pattern in self.FORBIDDEN:
+                with self.subTest(path=path, pattern=pattern):
+                    hits = [
+                        line for line in source.splitlines()
+                        if re.search(pattern, line) and not line.strip().startswith("#")
+                    ]
+                    self.assertEqual([], hits, f"{path}: {hits}")
+
+
+class TestLegacyPathsRemoved(unittest.TestCase):
+    """The old fallback lived on env vars and could not be seen or audited by an
+    administrator. Once every caller uses the manager it must be gone, not dormant."""
+
+    def test_sap_agent_no_longer_defines_a_private_cloud_fallback(self):
+        with open("agent/sap_agent.py", encoding="utf-8") as f:
+            source = f.read()
+        for gone in ("_call_cloud_fallback", "_call_cloud_primary", "_call_mlx",
+                     "_call_ollama", "check_ollama_connection"):
+            self.assertNotIn(f"def {gone}", source, gone)
+
+    def test_no_module_reads_provider_keys_from_the_environment(self):
+        """Credentials come from the encrypted store. ai/seed.py is the one
+        exception, and only on first boot."""
+        import glob
+        offenders = []
+        for path in glob.glob("agent/*.py") + glob.glob("api/*.py"):
+            with open(path, encoding="utf-8") as f:
+                for number, line in enumerate(f, 1):
+                    if "OPENAI_API_KEY" in line or "ANTHROPIC_API_KEY" in line:
+                        offenders.append(f"{path}:{number}")
+        self.assertEqual([], offenders)
+
+    # NOTE: the Kutty assertion that belonged here is omitted deliberately.
+    # training/ is gitignored, so training/kutty/retriever.py is not present in
+    # this worktree (controller ruling P-1). Its cutover is hand-off work.
+
+
 if __name__ == "__main__":
     unittest.main()

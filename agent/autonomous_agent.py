@@ -19,7 +19,6 @@ from typing import Callable
 
 
 MAX_ITERATIONS = 8
-OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 # ─── System prompt for the autonomous planning step ───────────────────────────
@@ -73,14 +72,11 @@ class AutonomousAgent:
     Uses iterative plan-execute-observe loop with business reasoning at the end.
     """
 
-    def __init__(self, model: str = "llama3.2", ollama_url: str = None):
-        try:
-            from core.config_manager import config as _cfg
-            self.model = model or _cfg.default_model
-            self.ollama_url = ollama_url or _cfg.ollama_url
-        except Exception:
-            self.model = model or "llama3.2"
-            self.ollama_url = ollama_url or OLLAMA_BASE_URL
+    def __init__(self, manager=None, tenant_id: str = "default", user_id: str | None = None):
+        from ai.manager import get_manager
+        self.manager = manager or get_manager()
+        self.tenant_id = tenant_id
+        self.user_id = user_id
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -165,16 +161,15 @@ class AutonomousAgent:
     # ── LLM helpers ───────────────────────────────────────────────────────────
 
     def _call_llm(self, messages: list[dict]) -> str:
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "options": {"temperature": 0.1, "top_p": 0.9},
-        }
+        from ai.types import Capability, Purpose
         try:
-            resp = requests.post(f"{self.ollama_url}/api/chat", json=payload, timeout=120)
-            resp.raise_for_status()
-            return resp.json()["message"]["content"]
+            response = self.manager.chat(
+                tenant_id=self.tenant_id, user_id=self.user_id,
+                purpose=Purpose.REASONING, intent="complex_reasoning",
+                messages=messages, carries_sap_data=True,
+                required=frozenset({Capability.CHAT}),
+            )
+            return response.content
         except Exception as e:
             return json.dumps({"action": "complete", "reasoning": f"LLM error: {str(e)}"})
 
@@ -319,12 +314,13 @@ class AutonomousAgent:
 def run_autonomous_agent(
     query: str,
     execute_tool_fn: Callable,
-    model: str = None,
-    ollama_url: str = None,
+    manager=None,
+    tenant_id: str = "default",
+    user_id: str | None = None,
     allowed_tools: set[str] | None = None,
 ) -> dict:
     """Top-level function to run the autonomous agent."""
-    agent = AutonomousAgent(model=model, ollama_url=ollama_url)
+    agent = AutonomousAgent(manager=manager, tenant_id=tenant_id, user_id=user_id)
     return agent.run(query, execute_tool_fn, allowed_tools=allowed_tools)
 
 

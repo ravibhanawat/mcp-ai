@@ -11,7 +11,7 @@ import re
 import requests
 from decimal import Decimal
 from datetime import date, datetime
-from typing import Any
+from typing import Any, AsyncIterator
 
 _logger = logging.getLogger("sap_agent")
 
@@ -329,7 +329,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         purpose: "Purpose | None" = None,
         carries_sap_data: bool = False,
         request_id: str | None = None,
-    ):
+    ) -> AsyncIterator[str]:
         """Async generator of token strings from the configured chat model.
 
         No failover: a stream that changed models mid-answer would show the user
@@ -348,84 +348,6 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             request_id=request_id,
         )
 
-    @staticmethod
-    def _sanitize_for_cloud(messages: list[dict]) -> list[dict]:
-        """Deprecated: delegates to core.security.sanitize_sap_payload.
-
-        Removed in the cloud-fallback cleanup once every call site routes through
-        ai.manager, which applies the same protection to every external provider.
-        """
-        from core.security import sanitize_sap_payload
-        return sanitize_sap_payload(messages)
-
-    def _call_cloud_fallback(self, messages: list[dict]) -> str:
-        """
-        Try OpenAI then Anthropic as fallback when Ollama is unreachable.
-        SAP tool result payloads are ALWAYS stripped before transmission —
-        confidential enterprise data is never sent to third-party cloud APIs.
-        Returns the LLM response string or raises ConnectionError if no
-        cloud credentials are configured.
-        """
-        messages = self._sanitize_for_cloud(messages)
-        openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        openai_model = os.environ.get("OPENAI_FALLBACK_MODEL", "").strip()
-        if openai_key and openai_model:
-            try:
-                import openai as _oai
-                client = _oai.OpenAI(api_key=openai_key)
-                resp   = client.chat.completions.create(
-                    model=openai_model,
-                    messages=messages,
-                    temperature=0.1,
-                    max_tokens=1024,
-                )
-                _logger.info("Cloud fallback: used OpenAI model %s", openai_model)
-                self._log_cloud_fallback("openai", openai_model)
-                return resp.choices[0].message.content
-            except Exception:
-                _logger.warning("OpenAI fallback failed — trying Anthropic.", exc_info=True)
-
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        anthropic_model = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
-        if anthropic_key and anthropic_model:
-            try:
-                import anthropic as _ant
-                client     = _ant.Anthropic(api_key=anthropic_key)
-                system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-                user_msgs  = [m for m in messages if m["role"] != "system"]
-                resp       = client.messages.create(
-                    model=anthropic_model,
-                    system=system_msg,
-                    messages=user_msgs,
-                    max_tokens=1024,
-                )
-                _logger.info("Cloud fallback: used Anthropic model %s", anthropic_model)
-                self._log_cloud_fallback("anthropic", anthropic_model)
-                return resp.content[0].text
-            except Exception:
-                _logger.error("Anthropic fallback failed.", exc_info=True)
-
-        raise ConnectionError(
-            "No LLM backend is available. Ollama is not running and no cloud "
-            "fallback is configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY, "
-            "or start Ollama locally."
-        )
-
-    def _log_cloud_fallback(self, provider: str, model: str) -> None:
-        """Write a compliance audit record whenever a cloud LLM is used."""
-        try:
-            from core.audit_logger import log_request
-            log_request(
-                user_id="system",
-                user_roles=["system"],
-                client_ip="internal",
-                endpoint="llm_fallback",
-                query=f"Cloud LLM fallback activated: provider={provider} model={model}",
-                tool_called=None,
-                status="ok",
-            )
-        except Exception:
-            _logger.warning("Failed to write cloud fallback audit record.", exc_info=True)
 
     def _extract_tool_call(self, response: str) -> dict | None:
         """Extract JSON tool call from LLM response"""
@@ -649,56 +571,12 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         result = run_autonomous_agent(
             query=query,
             execute_tool_fn=_execute,
+            manager=self.manager,
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
             allowed_tools=allowed_tools,
         )
         return result["report"], "autonomous_agent", result
-
-    def _call_cloud_primary(self, messages: list[dict]) -> str | None:
-        """
-        Attempt a cloud LLM call (OpenAI → Anthropic) for conversational queries
-        where no SAP data payload is involved. Returns None if no cloud key is set
-        or if the user has disabled cloud fallback.
-        This gives research-quality, analytical responses without touching local model.
-
-        Messages are always sanitized before transmission: this method is reached
-        from the same multi-turn conversation_history as _call_cloud_fallback, which
-        may carry an earlier turn's SAP tool payload even though the CURRENT turn is
-        conversational — so the same redaction guarantee applies here.
-        """
-        if self.local_only:
-            return None
-        messages = self._sanitize_for_cloud(messages)
-        openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        openai_model = os.environ.get("OPENAI_FALLBACK_MODEL", "").strip()
-        if openai_key and openai_model:
-            try:
-                import openai as _oai
-                client = _oai.OpenAI(api_key=openai_key)
-                resp   = client.chat.completions.create(
-                    model=openai_model, messages=messages, temperature=0.2, max_tokens=1500,
-                )
-                self._log_cloud_fallback("openai", openai_model)
-                return resp.choices[0].message.content
-            except Exception:
-                _logger.warning("Cloud primary (OpenAI) failed — falling back to local.", exc_info=True)
-
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        anthropic_model = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
-        if anthropic_key and anthropic_model:
-            try:
-                import anthropic as _ant
-                client     = _ant.Anthropic(api_key=anthropic_key)
-                system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-                user_msgs  = [m for m in messages if m["role"] != "system"]
-                resp       = client.messages.create(
-                    model=anthropic_model, system=system_msg, messages=user_msgs, max_tokens=1500,
-                )
-                self._log_cloud_fallback("anthropic", anthropic_model)
-                return resp.content[0].text
-            except Exception:
-                _logger.warning("Cloud primary (Anthropic) failed — falling back to local.", exc_info=True)
-
-        return None  # No cloud configured
 
     @staticmethod
     def _friendly_fallback(tool_name: str, tool_result: dict) -> str:
@@ -901,11 +779,9 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             return llm_response, "action_plan", action_plan
 
         # ── 4. Conversational / research response ─────────────────────────────
-        # No SAP data is involved here — safe to use cloud LLM for research-quality
-        # answers. Cloud gives analytical, context-rich responses that local models
-        # cannot match for general enterprise knowledge questions.
-        cloud_response = self._call_cloud_primary(messages)
-        final_response = cloud_response if cloud_response else llm_response
+        # The manager routes through configured providers + failover. The response
+        # is already available from the earlier _call_llm() — no separate cloud call needed.
+        final_response = llm_response
 
         if not is_trained_model:
             self.conversation_history.append({"role": "user", "content": user_message})
@@ -1247,8 +1123,9 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
         # ── 4. Conversational / cloud response ────────────────────────────────
         yield _sse("status", {"step": "Generating conversational response...", "phase": "streaming_answer"})
-        cloud_response = self._call_cloud_primary(messages)
-        final_response = cloud_response if cloud_response else llm_response
+        # The manager routes through configured providers + failover. The response
+        # is already available from the earlier stream call — no separate cloud call needed.
+        final_response = llm_response
 
         if not is_trained_model:
             self.conversation_history.append({"role": "user", "content": user_message})

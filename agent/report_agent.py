@@ -26,7 +26,6 @@ from typing import Any
 
 _logger = logging.getLogger("report_agent")
 
-OLLAMA_BASE_URL = "http://localhost:11434"
 MAX_TOOL_CALLS  = 5          # planner may request up to this many tool calls
 _EMP_ID_RE      = re.compile(r'\bEMP\d+\b', re.IGNORECASE)
 
@@ -191,14 +190,11 @@ class LLMReportAgent:
     Falls back to hardcoded fetchers if LLM is unavailable or JSON is malformed.
     """
 
-    def __init__(self, model: str = "llama3.2", ollama_url: str = None):
-        try:
-            from core.config_manager import config as _cfg
-            self.model      = model or _cfg.default_model
-            self.ollama_url = ollama_url or _cfg.ollama_url
-        except Exception:
-            self.model      = model or "llama3.2"
-            self.ollama_url = ollama_url or OLLAMA_BASE_URL
+    def __init__(self, manager=None, tenant_id: str = "default", user_id: str | None = None):
+        from ai.manager import get_manager
+        self.manager = manager or get_manager()
+        self.tenant_id = tenant_id
+        self.user_id = user_id
 
     # ── Public entry point ────────────────────────────────────────────────────
 
@@ -352,20 +348,15 @@ class LLMReportAgent:
     # ── LLM helpers ───────────────────────────────────────────────────────────
 
     def _call_llm(self, messages: list[dict]) -> str:
-        payload = {
-            "model":   self.model,
-            "messages": messages,
-            "stream":  False,
-            "options": {"temperature": 0.05, "top_p": 0.9},
-        }
+        from ai.types import Capability, Purpose
         try:
-            resp = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json=payload,
-                timeout=60,
+            response = self.manager.chat(
+                tenant_id=self.tenant_id, user_id=self.user_id,
+                purpose=Purpose.SUMMARIZATION, intent="report_generation",
+                messages=messages, carries_sap_data=True,
+                required=frozenset({Capability.CHAT}),
             )
-            resp.raise_for_status()
-            return resp.json()["message"]["content"]
+            return response.content
         except Exception as exc:
             _logger.warning("LLM call failed in report agent: %s", exc)
             return "{}"

@@ -111,26 +111,26 @@ def spinner(message: str, duration: float = 0.5):
     print("\r" + " " * 60 + "\r", end="", flush=True)
 
 
-def run_cli(model: str = "llama3.2"):
+def run_cli(manager=None, tenant_id: str = "default", user_id: str | None = None):
     """Main CLI loop"""
     print_banner()
 
     # Initialize agent
-    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Initializing DeepResearch AI Agent with Ollama model: {Colors.BOLD}{model}{Colors.RESET}")
+    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Initializing DeepResearch AI Agent...")
 
-    agent = SAPAgent(model=model)
+    agent = SAPAgent(manager=manager, tenant_id=tenant_id, user_id=user_id)
 
-    # Check Ollama connection
-    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Checking Ollama connection...")
-    if agent.check_ollama_connection():
-        print(f"  {Colors.GREEN}✓{Colors.RESET}  Ollama connected! Model '{model}' is ready.\n")
+    # Check backend status
+    print(f"  {Colors.CYAN}⟳{Colors.RESET}  Checking AI provider status...")
+    status = agent.backend_status()
+    if status.get("configured") and status.get("connected"):
+        print(f"  {Colors.GREEN}✓{Colors.RESET}  Connected! Model '{status.get('model', 'configured')}' is ready.\n")
+    elif status.get("configured"):
+        print(f"  {Colors.YELLOW}⚠{Colors.RESET}  Configured but not connected. Provider: {status.get('provider', 'unknown')}")
+        print(f"  {Colors.DIM}Detail: {status.get('detail', 'Unknown error')}{Colors.RESET}\n")
     else:
-        print(f"  {Colors.YELLOW}⚠{Colors.RESET}  Ollama not detected or model '{model}' not found.")
-        print(f"\n  {Colors.BOLD}To set up Ollama:{Colors.RESET}")
-        print(f"  1. Install: {Colors.CYAN}curl -fsSL https://ollama.ai/install.sh | sh{Colors.RESET}")
-        print(f"  2. Pull model: {Colors.CYAN}ollama pull {model}{Colors.RESET}")
-        print(f"  3. Run: {Colors.CYAN}ollama serve{Colors.RESET}")
-        print(f"\n  {Colors.DIM}You can still explore the interface. Real queries require Ollama running.{Colors.RESET}\n")
+        print(f"  {Colors.YELLOW}⚠{Colors.RESET}  No AI model is configured.")
+        print(f"  {Colors.BOLD}An administrator must add one under Administration → AI Configuration.{Colors.RESET}\n")
 
     print_module_info()
     print_separator()
@@ -219,9 +219,8 @@ def run_cli(model: str = "llama3.2"):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="DeepResearch AI with Ollama")
-    parser.add_argument("--model", default="llama3.2", help="Ollama model to use (default: llama3.2)")
-    parser.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama API URL")
+    parser = argparse.ArgumentParser(description="DeepResearch AI")
+    parser.add_argument("--model", default=None, help="Model override (sets requested_model_id)")
     args = parser.parse_args()
 
-    run_cli(model=args.model)
+    run_cli()
