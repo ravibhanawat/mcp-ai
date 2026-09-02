@@ -55,29 +55,28 @@ class SAPAgent:
         Replaces check_ollama_connection(), which could only ever describe
         Ollama. Never raises: the health endpoint calls it.
         """
-        from ai.health import last_health, probe, record_health
+        from ai.health import probe, record_health
         from ai.types import Purpose
         try:
             resolution = self.manager.resolve_only(
                 tenant_id=self.tenant_id, purpose=Purpose.CHAT
             )
+            resolved = resolution.resolved
+            api_key = self.manager.credential_for(resolved, self.tenant_id)
+            result = probe(resolved, api_key)
+            record_health(resolved.model.id, self.tenant_id, result)
+            return {
+                "configured": True,
+                "connected": result.status == "healthy",
+                "provider": resolved.provider.name,
+                "provider_type": resolved.provider.provider_type.value,
+                "model": resolved.model.model_name,
+                "model_identifier": resolved.model.model_identifier,
+                "latency_ms": result.latency_ms,
+                "detail": result.error,
+            }
         except Exception as exc:
             return {"configured": False, "connected": False, "detail": str(exc)}
-
-        resolved = resolution.resolved
-        api_key = self.manager.credential_for(resolved, self.tenant_id)
-        result = probe(resolved, api_key)
-        record_health(resolved.model.id, self.tenant_id, result)
-        return {
-            "configured": True,
-            "connected": result.status == "healthy",
-            "provider": resolved.provider.name,
-            "provider_type": resolved.provider.provider_type.value,
-            "model": resolved.model.model_name,
-            "model_identifier": resolved.model.model_identifier,
-            "latency_ms": result.latency_ms,
-            "detail": result.error,
-        }
 
     def system_prompt_for(self, prompt_profile: str) -> str:
         # Fine-tuned MLX model: use the EXACT tool names it was trained on.

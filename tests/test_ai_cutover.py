@@ -82,5 +82,31 @@ class TestPromptProfile(unittest.TestCase):
         self.assertNotIn("_use_mlx", source)
 
 
+class TestBackendStatusNeverRaises(unittest.TestCase):
+    """Verify that backend_status() never raises, even when credentials cannot be decrypted."""
+
+    def test_backend_status_handles_credential_decryption_failure(self):
+        """backend_status() must not raise when credential_for() raises CredentialUnavailable.
+
+        This is a critical contract for the /health endpoint — if key rotation breaks
+        credential decryption, the health check itself must not fail. It should instead
+        return configured=False with the error detail.
+        """
+        from agent.sap_agent import SAPAgent
+        from ai.errors import CredentialUnavailable
+
+        agent = SAPAgent(manager=manager_with())
+
+        # Patch credential_for to raise CredentialUnavailable (e.g., due to key rotation)
+        with patch.object(agent.manager, 'credential_for', side_effect=CredentialUnavailable("Key rotated, cannot decrypt stored credential")):
+            # Should not raise; should return error dict
+            result = agent.backend_status()
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["configured"], False)
+        self.assertEqual(result["connected"], False)
+        self.assertIn("Key rotated", result["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()
