@@ -4147,3 +4147,25 @@
   font-size: 13px;
   color: var(--text-muted, #666);
 }
+
+.ai-config-body { padding-top: 12px; }
+.modal-tabs-nested { border-bottom: 1px solid var(--border, #333); margin-bottom: 4px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+        line-height: 18px; margin-right: 4px; }
+.pill-local    { background: #E7F5EC; color: #16653C; }
+.pill-external { background: #FEF3C7; color: #92400E; }
+.pill-warn     { background: #FEE2E2; color: #991B1B; }
+.form-panel  { border: 1px solid var(--border, #333); border-radius: 8px; padding: 16px;
+               margin-top: 12px; display: grid; gap: 12px; }
+.form-panel label { display: grid; gap: 4px; font-size: 13px; }
+.form-panel label.checkbox { grid-auto-flow: column; justify-content: start;
+                             align-items: center; gap: 8px; }
+.field-hint    { font-size: 11px; color: var(--text-muted, #666); }
+.form-error    { background: #FEE2E2; color: #991B1B; padding: 8px 12px;
+                 border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+.form-warning  { background: #FEF3C7; color: #92400E; padding: 10px 12px;
+                 border-radius: 6px; font-size: 12px; line-height: 1.5; }
+.row-actions   { white-space: nowrap; }
+.empty         { text-align: center; color: var(--text-muted, #666); padding: 24px; }
+.mono          { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                 font-size: 12px; }

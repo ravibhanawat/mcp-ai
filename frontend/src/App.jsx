@@ -11,52 +11,8 @@ import MarkdownRenderer from './components/ui/MarkdownRenderer.jsx'
 import MessageRowComponent from './components/chat/MessageRow.jsx'
 import StreamingMessageRow from './components/chat/StreamingMessageRow.jsx'
 import DataPanel from './components/data/DataPanel.jsx'
-
-let rawAPI = import.meta.env.VITE_API_URL || '/api'
-if (rawAPI && rawAPI !== '/api' && !rawAPI.startsWith('http://') && !rawAPI.startsWith('https://') && !rawAPI.startsWith('/')) {
-  rawAPI = (rawAPI.includes('localhost') || rawAPI.includes('127.0.0.1')) ? `http://${rawAPI}` : `https://${rawAPI}`
-}
-const API = rawAPI.replace(/\/$/, '')
-
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
-
-async function refreshAccessToken() {
-  const refresh = localStorage.getItem('sap_agent_refresh_token')
-  if (!refresh) return false
-  try {
-    const res = await fetch(`${API}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refresh }),
-    })
-    if (!res.ok) return false
-    const data = await res.json()
-    localStorage.setItem('sap_agent_token', data.access_token)
-    if (data.refresh_token) localStorage.setItem('sap_agent_refresh_token', data.refresh_token)
-    return true
-  } catch { return false }
-}
-
-let _onSessionExpired = null
-
-async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem('sap_agent_token')
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  let res = await fetch(`${API}${path}`, { ...options, headers })
-  if (res.status === 401) {
-    const refreshed = await refreshAccessToken()
-    if (refreshed) {
-      headers['Authorization'] = `Bearer ${localStorage.getItem('sap_agent_token')}`
-      res = await fetch(`${API}${path}`, { ...options, headers })
-    } else {
-      localStorage.removeItem('sap_agent_token')
-      localStorage.removeItem('sap_agent_refresh_token')
-      if (_onSessionExpired) _onSessionExpired()
-    }
-  }
-  return res
-}
+import { API, apiFetch, apiJson, setSessionExpiredHandler } from './lib/api'
+import AIConfiguration from './components/admin/AIConfiguration'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1594,7 +1550,7 @@ function SettingsModal({ onClose, currentUser }) {
     { id: 'mcp', label: 'MCP Servers' },
     { id: 'ollama', label: 'LLM / Ollama' },
     { id: 'claude', label: 'Claude Desktop' },
-    ...(isAdmin ? [{ id: 'users', label: 'Users & Roles' }, { id: 'audit', label: 'Audit Logs' }] : []),
+    ...(isAdmin ? [{ id: 'ai', label: 'AI Configuration' }, { id: 'users', label: 'Users & Roles' }, { id: 'audit', label: 'Audit Logs' }] : []),
   ]
 
   return (
@@ -1780,6 +1736,9 @@ function SettingsModal({ onClose, currentUser }) {
               <div style={{ marginTop: 8, color: 'var(--text-muted)' }}>Full benchmarks: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>docs/BENCHMARKS.md</code></div>
             </div>
           </>}
+
+          {/* AI Configuration (admin) */}
+          {tab === 'ai' && isAdmin && <AIConfiguration />}
 
           {/* Users & Roles (admin) */}
           {tab === 'users' && isAdmin && <>
@@ -2668,7 +2627,7 @@ export default function App() {
     hashLoadedRef.current = false; window.location.hash = '#/'
   }, [])
 
-  useEffect(() => { _onSessionExpired = handleLogout; return () => { _onSessionExpired = null } }, [handleLogout])
+  useEffect(() => { setSessionExpiredHandler(handleLogout); return () => { setSessionExpiredHandler(null) } }, [handleLogout])
 
   useEffect(() => {
     const check = async () => {
