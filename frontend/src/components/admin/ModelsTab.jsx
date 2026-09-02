@@ -78,6 +78,13 @@ export default function ModelsTab() {
       : [...m.capabilities, cap],
   }))
 
+  const remove = async (id) => {
+    if (!confirm('Delete this model? Routing rules and fallback entries that reference it are removed too.')) return
+    setError(''); setChecks(null)
+    try { await apiJson(`/admin/ai/models/${id}`, { method: 'DELETE' }); load() }
+    catch (e) { setError(e.message) }
+  }
+
   return (
     <>
       {error && <div className="form-error">{error}</div>}
@@ -121,6 +128,7 @@ export default function ModelsTab() {
                   ? <button className="btn-ghost" onClick={() => act(m.id, 'deactivate')}>Deactivate</button>
                   : <button className="btn-ghost" onClick={() => act(m.id, 'activate')}>Activate</button>}
                 {!m.is_default && <button className="btn-ghost" onClick={() => setDefault(m)}>Set default</button>}
+                <button className="btn-ghost danger" onClick={() => remove(m.id)}>Delete</button>
               </td>
             </tr>
           ))}
