@@ -212,7 +212,7 @@ def run_cli(manager=None, tenant_id: str = "default", user_id: str | None = None
             continue
         except ConnectionError as e:
             print(f"\n  {Colors.RED}✗  Connection Error: {e}{Colors.RESET}")
-            print(f"  {Colors.DIM}Make sure Ollama is running: ollama serve{Colors.RESET}\n")
+            print(f"  {Colors.DIM}Check that the configured AI provider is running.{Colors.RESET}\n")
         except Exception as e:
             print(f"\n  {Colors.RED}✗  Error: {e}{Colors.RESET}\n")
 

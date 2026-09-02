@@ -1,6 +1,10 @@
 """
 DeepResearch AI - Entry Point
-Run: python main.py [--model llama3.2] [--ollama-url http://localhost:11434]
+Run: python main.py [--model <model-id>]
+
+The model is chosen by the administrator in AI Configuration. --model is an
+explicit override for a single run and must name a model that is registered
+and marked user-selectable; it is not a way to reach an unconfigured backend.
 """
 import sys
 import os
@@ -17,10 +21,8 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                           # Use default llama3.2
-  python main.py --model mistral           # Use Mistral model
-  python main.py --model llama3.1:8b      # Use specific model version
-  python main.py --model codellama        # Use CodeLlama
+  python main.py                          # Use the configured default model
+  python main.py --model <model-id>       # Override for this session
 
 Supported SAP Modules:
   FI/CO  - Finance & Controlling
@@ -33,7 +35,7 @@ Supported SAP Modules:
     parser.add_argument(
         "--model",
         default=None,
-        help="Model override (sets requested_model_id)"
+        help="Override the configured model for this session (must be user-selectable)"
     )
 
     args = parser.parse_args()
