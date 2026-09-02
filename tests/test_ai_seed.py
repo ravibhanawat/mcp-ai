@@ -32,6 +32,14 @@ class SeedTestCase(unittest.TestCase):
     def names(self):
         return [p["name"] for p in self.providers]
 
+    def provider_name_for_model(self, model_id: str) -> str:
+        """Look up the provider name for a given model ID."""
+        model = next((m for m in self.models if m["id"] == model_id), None)
+        if not model:
+            return None
+        provider = next((p for p in self.providers if p["id"] == model["provider_id"]), None)
+        return provider["name"] if provider else None
+
 
 class TestOllamaSeeding(SeedTestCase):
 
@@ -67,12 +75,30 @@ class TestCloudSeeding(SeedTestCase):
         self.assertTrue(any("sk-from-env" in c for c in self.creds))
 
     def test_fallback_chain_preserves_openai_then_anthropic_order(self):
-        """Today's behaviour: Ollama, then OpenAI, then Anthropic."""
+        """Today's behaviour: Ollama, then OpenAI, then Anthropic.
+
+        This test verifies that the first request after upgrade gets the same
+        answer from the same model. The order matters: if swapped, failover
+        behaviour silently changes on upgrade.
+        """
         with patch("ai.seed._ollama_settings", return_value=("http://x:11434", "m")), \
              patch.dict(os.environ, {"OPENAI_API_KEY": "sk-o", "ANTHROPIC_API_KEY": "sk-ant-a"}):
             seed_from_existing_config()
-        ordered = [r["model_id"] for r in sorted(self.rules, key=lambda r: r["priority"])]
-        self.assertEqual(2, len(ordered))
+
+        # Verify exactly two fallback rules were created
+        self.assertEqual(2, len(self.rules))
+
+        # Sort by priority and verify ascending order [0, 1]
+        sorted_rules = sorted(self.rules, key=lambda r: r["priority"])
+        priorities = [r["priority"] for r in sorted_rules]
+        self.assertEqual([0, 1], priorities)
+
+        # Verify priority 0 points to OpenAI model and priority 1 to Anthropic
+        openai_model_id = sorted_rules[0]["model_id"]
+        anthropic_model_id = sorted_rules[1]["model_id"]
+
+        self.assertEqual("OpenAI", self.provider_name_for_model(openai_model_id))
+        self.assertEqual("Anthropic", self.provider_name_for_model(anthropic_model_id))
 
     def test_no_cloud_keys_creates_no_external_providers(self):
         with patch("ai.seed._ollama_settings", return_value=("http://x:11434", "m")), \
