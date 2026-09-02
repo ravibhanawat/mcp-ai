@@ -35,8 +35,8 @@ Supported SAP Modules:
     parser.add_argument(
         "--model",
         default=None,
-        help="Override the configured model for this session (must be user-selectable)"
+        help="Request a specific model for this session. Honoured only if the administrator has enabled user model selection and marked that model selectable; otherwise the configured default is used."
     )
 
     args = parser.parse_args()
-    run_cli()
+    run_cli(requested_model_id=args.model)

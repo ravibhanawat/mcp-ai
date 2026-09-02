@@ -111,14 +111,14 @@ def spinner(message: str, duration: float = 0.5):
     print("\r" + " " * 60 + "\r", end="", flush=True)
 
 
-def run_cli(manager=None, tenant_id: str = "default", user_id: str | None = None):
+def run_cli(manager=None, tenant_id: str = "default", user_id: str | None = None, requested_model_id: str | None = None):
     """Main CLI loop"""
     print_banner()
 
     # Initialize agent
     print(f"  {Colors.CYAN}⟳{Colors.RESET}  Initializing DeepResearch AI Agent...")
 
-    agent = SAPAgent(manager=manager, tenant_id=tenant_id, user_id=user_id)
+    agent = SAPAgent(manager=manager, tenant_id=tenant_id, user_id=user_id, requested_model_id=requested_model_id)
 
     # Check backend status
     print(f"  {Colors.CYAN}⟳{Colors.RESET}  Checking AI provider status...")
@@ -220,7 +220,7 @@ def run_cli(manager=None, tenant_id: str = "default", user_id: str | None = None
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="DeepResearch AI")
-    parser.add_argument("--model", default=None, help="Model override (sets requested_model_id)")
+    parser.add_argument("--model", default=None, help="Request a specific model for this session. Honoured only if the administrator has enabled user model selection and marked that model selectable; otherwise the configured default is used.")
     args = parser.parse_args()
 
-    run_cli()
+    run_cli(requested_model_id=args.model)

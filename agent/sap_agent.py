@@ -34,16 +34,22 @@ class SAPAgent:
         manager: "AIProviderManager | None" = None,
         tenant_id: str = "default",
         user_id: str | None = None,
+        requested_model_id: str | None = None,
     ):
         """The agent no longer knows what model it uses.
 
         It asks the manager for one per request, which is what makes the model
         an administrator's decision rather than a deployment's.
+
+        requested_model_id: if set, the agent will request this model from the
+        manager. The manager honours the request only if the tenant policy has
+        allow_user_selection=True and the model is marked user_selectable.
         """
         from ai.manager import get_manager
         self.manager = manager or get_manager()
         self.tenant_id = tenant_id
         self.user_id = user_id
+        self.requested_model_id = requested_model_id
         # Confidential callers (Kutty) set this; the router refuses to resolve an
         # external provider when it is True.
         self.local_only = False
@@ -318,6 +324,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             carries_sap_data=carries_sap_data,
             required=required or frozenset(),
             local_only=self.local_only,
+            requested_model_id=self.requested_model_id,
             request_id=request_id,
         )
         return response.content
@@ -345,6 +352,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             messages=messages,
             carries_sap_data=carries_sap_data,
             local_only=self.local_only,
+            requested_model_id=self.requested_model_id,
             request_id=request_id,
         )
 
