@@ -4,10 +4,14 @@ Shared FastAPI auth dependencies.
 Extracted from api/server.py so route modules can depend on authentication
 without importing the module that mounts them. Behaviour is unchanged: this is
 a move, not a rewrite.
+
+This module is the single source of truth for _AUTH_ENABLED. api/server.py
+imports it so the flag is never recomputed; see the comments there.
 """
 from __future__ import annotations
 
 import os
+import sys
 
 import jwt as _jwt
 from fastapi import Depends, HTTPException, status
@@ -17,11 +21,20 @@ from auth.jwt_handler import decode_token
 
 _bearer = HTTPBearer(auto_error=False)
 
+# ── Environment & security constants ─────────────────────────────────────────
 _APP_ENV = os.environ.get("APP_ENV", "development").lower()
-_AUTH_ENABLED = not (
-    os.environ.get("DISABLE_AUTH", "false").lower() in ("true", "1", "yes")
-    and _APP_ENV == "development"
-)
+_IS_DEV = _APP_ENV == "development"
+
+# ── DISABLE_AUTH: only permitted in development ────────────────────────────────
+_disable_auth_requested = os.environ.get("DISABLE_AUTH", "false").lower() in ("true", "1", "yes")
+if _disable_auth_requested and not _IS_DEV:
+    print(
+        "FATAL: DISABLE_AUTH=true is not permitted outside APP_ENV=development.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+_AUTH_ENABLED = not _disable_auth_requested
+
 _GUEST_USER = {"user_id": "guest", "roles": ["read_only"], "full_name": "Guest (auth disabled)"}
 
 

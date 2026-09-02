@@ -54,7 +54,7 @@ from auth.jwt_handler import (
 from auth.rbac import ALL_ROLES, check_tool_access, get_allowed_tools
 from auth import users as user_store
 from api.oauth import router as _oauth_router, verify_mcp_token
-from api.deps import get_current_user, require_admin
+from api.deps import get_current_user, require_admin, _AUTH_ENABLED
 import jwt as _jwt
 import json
 
@@ -96,14 +96,9 @@ _APP_ENV = os.environ.get("APP_ENV", "development").lower()
 _IS_DEV  = _APP_ENV == "development"
 
 # ── DISABLE_AUTH: only permitted in development ────────────────────────────────
-_disable_auth_requested = os.environ.get("DISABLE_AUTH", "false").lower() in ("true", "1", "yes")
-if _disable_auth_requested and not _IS_DEV:
-    print(
-        "FATAL: DISABLE_AUTH=true is not permitted outside APP_ENV=development.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-_AUTH_ENABLED = not _disable_auth_requested
+# The production guard and _AUTH_ENABLED computation are now in api/deps.py to
+# ensure they are the single source of truth. api/server.py imports _AUTH_ENABLED
+# from there so edits to either location do not silently diverge.
 
 # ── CORS ───────────────────────────────────────────────────────────────────────
 _cors_raw = os.environ.get("CORS_ORIGINS", "").strip()
