@@ -370,31 +370,14 @@ class Matrix:
                 "failures": fails}
 
 
-def verify_authorization_independent_of_provider_type():
-    """Parameterize the RBAC matrix over provider types.
-
-    Requirement: the authorization decision (which tools are allowed) must be
-    independent of which provider type is configured. This is the foundation of
-    Requirement 17.
-
-    This function is a placeholder for provider-type parameterization. The same
-    matrix suite MUST pass identically regardless of whether the configured
-    provider is OLLAMA, OPENAI, AZURE_OPENAI, ANTHROPIC, or CUSTOM.
-
-    To run this parameterization locally:
-    1. Ensure PostgreSQL is running and seeded
-    2. For each provider type, configure it as the default
-    3. Run the full matrix
-    4. Compare results: must be byte-identical
-
-    For now, this is validated in tests/test_ai_security.py::TestAuthorizationIsModelIndependent
-    which tests the authorization gate directly.
-    """
-    # NOTE: A full implementation would iterate over ProviderType.OLLAMA,
-    # ProviderType.OPENAI, ProviderType.AZURE_OPENAI, ProviderType.ANTHROPIC,
-    # ProviderType.CUSTOM, provisioning each and running the matrix.
-    # Each run's results must be identical for RBAC decisions.
-    pass
+# NOTE: Provider-type parameterization of this matrix would require seeded PostgreSQL,
+# app restarts between configurations, and comparison of full matrix runs across
+# ProviderType.OLLAMA, .OPENAI, .AZURE_OPENAI, .ANTHROPIC, and .CUSTOM. This is
+# infeasible in the test environment and is validated instead in
+# tests/test_ai_security.py::TestAuthorizationIsModelIndependent, which proves that
+# get_allowed_tools([role]) returns the same result regardless of which provider type
+# the manager is configured with. The authorization gate is upstream of model selection,
+# so changing the provider cannot change what a user may read.
 
 
 def main():
