@@ -1,13 +1,8 @@
 """
 SAP AI Agent - Core Engine
-Supports multiple LLM backends in priority order:
-  1. MLX server (http://localhost:8080)  — fine-tuned SAP model on Apple Silicon
-  2. Ollama (http://localhost:11434)     — original local backend
-  3. OpenAI API (OPENAI_API_KEY)         — cloud fallback
-  4. Anthropic API (ANTHROPIC_API_KEY)   — cloud fallback
-
-The agent automatically selects the first available backend. No configuration
-change is needed when deploying to environments without a local model.
+Routes all LLM calls through the provider manager, which resolves the model
+based on tenant configuration. Models and backends are entirely configurable
+via the configuration store, not hardcoded.
 """
 import json
 import logging
@@ -32,49 +27,62 @@ from tools.tool_registry import TOOLS, FUNCTION_MAP, execute_tool, get_tools_for
 from agent.auto_research import run_auto_research, is_auto_research_query
 from agent.autonomous_agent import run_autonomous_agent, is_autonomous_query
 
-OLLAMA_BASE_URL = "http://localhost:11434"
-MLX_BASE_URL    = "http://localhost:8080"
-MLX_MODEL_PATH  = "training/sap-model-fused"
-
 
 class SAPAgent:
-    def __init__(self, model: str = None, ollama_url: str = None):
-        # Prefer explicit args; fall back to config file; fall back to defaults
-        try:
-            from core.config_manager import config as _cfg
-            model = model or _cfg.default_model
-            ollama_url = ollama_url or _cfg.ollama_url
-        except Exception:
-            pass
-        model = model or "llama3.2"
-        ollama_url = ollama_url or OLLAMA_BASE_URL
+    def __init__(
+        self,
+        manager: "AIProviderManager | None" = None,
+        tenant_id: str = "default",
+        user_id: str | None = None,
+    ):
+        """The agent no longer knows what model it uses.
 
-        # Detect whether to use MLX server (fine-tuned) or Ollama
-        self._use_mlx = self._mlx_available()
-        self.model = model
-        self.ollama_url = ollama_url
-        # When False, an unreachable Ollama raises instead of falling back to a
-        # cloud LLM. Callers handling confidential text (e.g. Kutty ticket RAG)
-        # set this False so payloads never leave the machine.
-        self.allow_cloud_fallback = True
+        It asks the manager for one per request, which is what makes the model
+        an administrator's decision rather than a deployment's.
+        """
+        from ai.manager import get_manager
+        self.manager = manager or get_manager()
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+        # Confidential callers (Kutty) set this; the router refuses to resolve an
+        # external provider when it is True.
+        self.local_only = False
         self.conversation_history = []
-        self.system_prompt = self._build_system_prompt()
 
-    def _mlx_available(self) -> bool:
-        """Return True if the MLX OpenAI-compatible server is running."""
+    def backend_status(self) -> dict:
+        """Report the configured chat model and whether it answers.
+
+        Replaces check_ollama_connection(), which could only ever describe
+        Ollama. Never raises: the health endpoint calls it.
+        """
+        from ai.health import last_health, probe, record_health
+        from ai.types import Purpose
         try:
-            r = requests.get(f"{MLX_BASE_URL}/v1/models", timeout=2)
-            if r.status_code == 200:
-                ids = [m["id"] for m in r.json().get("data", [])]
-                return any(MLX_MODEL_PATH in mid for mid in ids)
-        except Exception:
-            pass
-        return False
+            resolution = self.manager.resolve_only(
+                tenant_id=self.tenant_id, purpose=Purpose.CHAT
+            )
+        except Exception as exc:
+            return {"configured": False, "connected": False, "detail": str(exc)}
 
-    def _build_system_prompt(self) -> str:
+        resolved = resolution.resolved
+        api_key = self.manager.credential_for(resolved, self.tenant_id)
+        result = probe(resolved, api_key)
+        record_health(resolved.model.id, self.tenant_id, result)
+        return {
+            "configured": True,
+            "connected": result.status == "healthy",
+            "provider": resolved.provider.name,
+            "provider_type": resolved.provider.provider_type.value,
+            "model": resolved.model.model_name,
+            "model_identifier": resolved.model.model_identifier,
+            "latency_ms": result.latency_ms,
+            "detail": result.error,
+        }
+
+    def system_prompt_for(self, prompt_profile: str) -> str:
         # Fine-tuned MLX model: use the EXACT tool names it was trained on.
         # Do not auto-generate from registry — name mismatch causes hallucinations.
-        if self._use_mlx:
+        if prompt_profile == "trained_tool_json":
             tool_list_str = (
                 "FI/CO: get_vendor_info, get_invoice_status, get_open_invoices, get_cost_center_budget, list_all_cost_centers, get_gl_posting_for_receipt, get_customer_ledger, get_tds_certificate_data\n"
                 "MM: get_material_info, get_stock_level, get_purchase_order, check_reorder_needed, get_bom\n"
@@ -287,82 +295,33 @@ Examples that require search_sap_docs:
 
 CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with natural language text."""
 
-    def check_ollama_connection(self) -> bool:
-        """Check if the active backend (MLX or Ollama) is reachable."""
-        if self._use_mlx:
-            return self._mlx_available()
-        try:
-            resp = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
-            if resp.status_code == 200:
-                models = [m["name"] for m in resp.json().get("models", [])]
-                return any(self.model in m for m in models)
-            return False
-        except Exception:
-            return False
+    def _call_llm(
+        self,
+        messages: list[dict],
+        *,
+        purpose: "Purpose | None" = None,
+        carries_sap_data: bool = False,
+        required: frozenset | None = None,
+        request_id: str | None = None,
+    ) -> str:
+        """Send messages to whichever model is configured for this purpose.
 
-    def _call_llm(self, messages: list[dict]) -> str:
-        """Route to MLX server or Ollama based on availability."""
-        if self._use_mlx:
-            return self._call_mlx(messages)
-        return self._call_ollama(messages)
-
-    def _call_mlx(self, messages: list[dict]) -> str:
-        """Call the MLX OpenAI-compatible server (fine-tuned SAP model)."""
-        payload = {
-            "model": MLX_MODEL_PATH,
-            "messages": messages,
-            "temperature": 0.05,
-            "max_tokens": 256,
-        }
-        try:
-            response = requests.post(
-                f"{MLX_BASE_URL}/v1/chat/completions",
-                json=payload,
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.ConnectionError:
-            raise ConnectionError(f"Cannot connect to MLX server at {MLX_BASE_URL}.")
-        except requests.exceptions.Timeout:
-            raise TimeoutError("MLX server request timed out.")
-        except Exception as e:
-            _logger.error("MLX API error", exc_info=True)
-            raise Exception("MLX API error. Check server logs.")
-
-    def _call_ollama(self, messages: list[dict]) -> str:
-        """Make a call to Ollama API. Falls back to cloud LLM if Ollama is unreachable."""
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": 0.1,
-                "top_p": 0.9,
-            }
-        }
-        try:
-            response = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json=payload,
-                timeout=30,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["message"]["content"]
-        except requests.exceptions.ConnectionError:
-            if not self.allow_cloud_fallback:
-                raise ConnectionError(
-                    f"Cannot connect to Ollama at {self.ollama_url} and cloud "
-                    "fallback is disabled (confidential payload stays local)."
-                )
-            _logger.warning("Ollama unreachable at %s — trying cloud LLM fallback.", self.ollama_url)
-            return self._call_cloud_fallback(messages)
-        except requests.exceptions.Timeout:
-            raise TimeoutError("Ollama request timed out. The model may be loading.")
-        except Exception as e:
-            _logger.error("Ollama API error", exc_info=True)
-            raise Exception("LLM request failed. Check server logs.")
+        The agent expresses what it needs — a purpose, whether the payload holds
+        SAP records, which capabilities it requires — and the manager decides
+        which model serves it and whether the payload may leave the estate.
+        """
+        from ai.types import Purpose as _Purpose
+        response = self.manager.chat(
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            purpose=purpose or _Purpose.CHAT,
+            messages=messages,
+            carries_sap_data=carries_sap_data,
+            required=required or frozenset(),
+            local_only=self.local_only,
+            request_id=request_id,
+        )
+        return response.content
 
     @staticmethod
     def _sanitize_for_cloud(messages: list[dict]) -> list[dict]:
@@ -384,39 +343,39 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         """
         messages = self._sanitize_for_cloud(messages)
         openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        if openai_key:
+        openai_model = os.environ.get("OPENAI_FALLBACK_MODEL", "").strip()
+        if openai_key and openai_model:
             try:
                 import openai as _oai
                 client = _oai.OpenAI(api_key=openai_key)
-                model  = os.environ.get("OPENAI_FALLBACK_MODEL", "gpt-4o-mini")
                 resp   = client.chat.completions.create(
-                    model=model,
+                    model=openai_model,
                     messages=messages,
                     temperature=0.1,
                     max_tokens=1024,
                 )
-                _logger.info("Cloud fallback: used OpenAI model %s", model)
-                self._log_cloud_fallback("openai", model)
+                _logger.info("Cloud fallback: used OpenAI model %s", openai_model)
+                self._log_cloud_fallback("openai", openai_model)
                 return resp.choices[0].message.content
             except Exception:
                 _logger.warning("OpenAI fallback failed — trying Anthropic.", exc_info=True)
 
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if anthropic_key:
+        anthropic_model = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
+        if anthropic_key and anthropic_model:
             try:
                 import anthropic as _ant
                 client     = _ant.Anthropic(api_key=anthropic_key)
-                model      = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "claude-haiku-4-5")
                 system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
                 user_msgs  = [m for m in messages if m["role"] != "system"]
                 resp       = client.messages.create(
-                    model=model,
+                    model=anthropic_model,
                     system=system_msg,
                     messages=user_msgs,
                     max_tokens=1024,
                 )
-                _logger.info("Cloud fallback: used Anthropic model %s", model)
-                self._log_cloud_fallback("anthropic", model)
+                _logger.info("Cloud fallback: used Anthropic model %s", anthropic_model)
+                self._log_cloud_fallback("anthropic", anthropic_model)
                 return resp.content[0].text
             except Exception:
                 _logger.error("Anthropic fallback failed.", exc_info=True)
@@ -665,8 +624,6 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         result = run_autonomous_agent(
             query=query,
             execute_tool_fn=_execute,
-            model=self.model,
-            ollama_url=self.ollama_url,
             allowed_tools=allowed_tools,
         )
         return result["report"], "autonomous_agent", result
@@ -683,35 +640,35 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         may carry an earlier turn's SAP tool payload even though the CURRENT turn is
         conversational — so the same redaction guarantee applies here.
         """
-        if not self.allow_cloud_fallback:
+        if self.local_only:
             return None
         messages = self._sanitize_for_cloud(messages)
         openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
-        if openai_key:
+        openai_model = os.environ.get("OPENAI_FALLBACK_MODEL", "").strip()
+        if openai_key and openai_model:
             try:
                 import openai as _oai
                 client = _oai.OpenAI(api_key=openai_key)
-                model  = os.environ.get("OPENAI_FALLBACK_MODEL", "gpt-4o-mini")
                 resp   = client.chat.completions.create(
-                    model=model, messages=messages, temperature=0.2, max_tokens=1500,
+                    model=openai_model, messages=messages, temperature=0.2, max_tokens=1500,
                 )
-                self._log_cloud_fallback("openai", model)
+                self._log_cloud_fallback("openai", openai_model)
                 return resp.choices[0].message.content
             except Exception:
                 _logger.warning("Cloud primary (OpenAI) failed — falling back to local.", exc_info=True)
 
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if anthropic_key:
+        anthropic_model = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "").strip()
+        if anthropic_key and anthropic_model:
             try:
                 import anthropic as _ant
                 client     = _ant.Anthropic(api_key=anthropic_key)
-                model      = os.environ.get("ANTHROPIC_FALLBACK_MODEL", "claude-haiku-4-5")
                 system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
                 user_msgs  = [m for m in messages if m["role"] != "system"]
                 resp       = client.messages.create(
-                    model=model, system=system_msg, messages=user_msgs, max_tokens=1500,
+                    model=anthropic_model, system=system_msg, messages=user_msgs, max_tokens=1500,
                 )
-                self._log_cloud_fallback("anthropic", model)
+                self._log_cloud_fallback("anthropic", anthropic_model)
                 return resp.content[0].text
             except Exception:
                 _logger.warning("Cloud primary (Anthropic) failed — falling back to local.", exc_info=True)
@@ -804,7 +761,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             {"role": "user", "content": response_prompt},
         ]
         try:
-            llm_response = self._call_llm(messages)
+            llm_response = self._call_llm(messages, carries_sap_data=True)
             # If LLM returned JSON (common with small local models), use friendly fallback
             stripped = llm_response.strip()
             if stripped.startswith(("{", "[", "```")):
@@ -825,20 +782,27 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
           4. Cloud LLM for conversational / research responses (no SAP data sent)
           5. Local LLM fallback for pure conversation
         """
+        from ai.types import Purpose
+
         # ── 1. Intercept autonomous / research queries ─────────────────────────
         if is_autonomous_query(user_message):
             return self.autonomous(user_message, allowed_tools=allowed_tools)
         if is_auto_research_query(user_message):
             return self.auto_research(user_message, allowed_tools=allowed_tools)
 
+        # ── Resolve model to get prompt_profile ────────────────────────────────
+        resolution = self.manager.resolve_only(tenant_id=self.tenant_id, purpose=Purpose.CHAT)
+        prompt_profile = resolution.resolved.model.prompt_profile
+        is_trained_model = prompt_profile == "trained_tool_json"
+
         # ── Build scoped system prompt ─────────────────────────────────────────
-        system_prompt = self.system_prompt
-        if allowed_tools is not None and not self._use_mlx:
+        system_prompt = self.system_prompt_for(prompt_profile)
+        if allowed_tools is not None and not is_trained_model:
             from tools.tool_registry import get_tools_for_prompt as _gtp
             tools_json = _gtp(allowed_tools=allowed_tools)
             split_marker = "AVAILABLE SAP TOOLS (for MODE 1)"
-            if split_marker in self.system_prompt:
-                system_prompt = self.system_prompt.split(split_marker)[0]
+            if split_marker in system_prompt:
+                system_prompt = system_prompt.split(split_marker)[0]
                 system_prompt += f"{split_marker}\n{'═' * 35}\n{tools_json}\n\n"
                 system_prompt += "CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with natural language text."
 
@@ -863,7 +827,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             # Response formatting uses local LLM (tool data must not leave the network)
             final_response = self._format_tool_response(user_message, tool_name, tool_result)
 
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": final_response})
                 if len(self.conversation_history) > 20:
@@ -893,7 +857,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
 
             final_response = self._format_tool_response(user_message, tool_name, tool_result)
 
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": final_response})
                 if len(self.conversation_history) > 20:
@@ -904,7 +868,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         # Check for workflow / action plan intent
         action_plan = self._extract_action_plan(llm_response)
         if action_plan:
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": llm_response})
                 if len(self.conversation_history) > 20:
@@ -918,7 +882,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         cloud_response = self._call_cloud_primary(messages)
         final_response = cloud_response if cloud_response else llm_response
 
-        if not self._use_mlx:
+        if not is_trained_model:
             self.conversation_history.append({"role": "user", "content": user_message})
             self.conversation_history.append({"role": "assistant", "content": final_response})
             if len(self.conversation_history) > 20:
@@ -966,59 +930,11 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             await asyncio.sleep(0)
         yield _sse("table_end", {"total": len(rows)})
 
-    async def _call_ollama_stream(self, messages: list[dict]):
-        """
-        Async generator — yields token strings from Ollama's streaming API.
-        Uses a queue+thread pattern so iter_lines() never blocks the event loop.
-        """
-        import asyncio
-        import queue
-        import threading
-
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
-            "options": {"temperature": 0.1, "top_p": 0.9},
-        }
-        q: queue.Queue = queue.Queue()
-
-        def _worker():
-            try:
-                r = requests.post(
-                    f"{self.ollama_url}/api/chat",
-                    json=payload,
-                    stream=True,
-                    timeout=60,
-                )
-                for line in r.iter_lines():
-                    if line:
-                        chunk = json.loads(line)
-                        token = chunk.get("message", {}).get("content", "")
-                        if token:
-                            q.put(token)
-                        if chunk.get("done"):
-                            break
-            except Exception as exc:
-                q.put(exc)
-            finally:
-                q.put(None)  # sentinel
-
-        threading.Thread(target=_worker, daemon=True).start()
-        loop = asyncio.get_running_loop()
-        while True:
-            item = await loop.run_in_executor(None, q.get)
-            if item is None:
-                break
-            if isinstance(item, Exception):
-                raise item
-            yield item
-
     async def _format_tool_response_stream(self, user_message: str, tool_name: str, tool_result: dict):
         """
-        Async generator — streams the LLM's natural-language formatting of a tool result.
-        Buffers the first 20 chars to detect JSON output (falls back to _friendly_fallback).
-        Uses the same local-LLM routing as _format_tool_response.
+        Async generator — yields the LLM's natural-language formatting of a tool result in chunks.
+        Uses non-streaming manager API and yields result in chunks for compatibility with streaming interface.
+        Falls back to friendly_fallback if LLM returns JSON.
         """
         import asyncio
 
@@ -1051,29 +967,21 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             {"role": "user", "content": response_prompt},
         ]
 
-        buffer = ""
-        buffer_limit = 20
-        buffering = True
-
         try:
-            async for token in self._call_ollama_stream(messages):
-                if buffering:
-                    buffer += token
-                    if len(buffer) >= buffer_limit:
-                        buffering = False
-                        if buffer.lstrip().startswith(("{", "[", "```")):
-                            yield self._friendly_fallback(tool_name, tool_result)
-                            return
-                        else:
-                            yield buffer
-                else:
-                    yield token
-            # Flush remaining buffer if we never hit the limit
-            if buffering and buffer:
-                if buffer.lstrip().startswith(("{", "[", "```")):
-                    yield self._friendly_fallback(tool_name, tool_result)
-                else:
-                    yield buffer
+            # Use non-streaming LLM call and yield result in chunks for compatibility
+            llm_response = await asyncio.to_thread(
+                self._call_llm, messages, carries_sap_data=True
+            )
+            # Detect JSON output
+            stripped = llm_response.strip()
+            if stripped.startswith(("{", "[", "```")):
+                yield self._friendly_fallback(tool_name, tool_result)
+            else:
+                # Yield the response in small chunks for streaming effect
+                chunk_size = 20
+                for i in range(0, len(llm_response), chunk_size):
+                    yield llm_response[i:i + chunk_size]
+                    await asyncio.sleep(0)  # Yield control to event loop
         except Exception:
             yield self._friendly_fallback(tool_name, tool_result)
 
@@ -1152,14 +1060,20 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
             })
             return
 
+        # ── Resolve model to get prompt_profile ────────────────────────────────
+        from ai.types import Purpose
+        resolution = self.manager.resolve_only(tenant_id=self.tenant_id, purpose=Purpose.CHAT)
+        prompt_profile = resolution.resolved.model.prompt_profile
+        is_trained_model = prompt_profile == "trained_tool_json"
+
         # ── Build scoped system prompt ─────────────────────────────────────────
-        system_prompt = self.system_prompt
-        if allowed_tools is not None and not self._use_mlx:
+        system_prompt = self.system_prompt_for(prompt_profile)
+        if allowed_tools is not None and not is_trained_model:
             from tools.tool_registry import get_tools_for_prompt as _gtp
             tools_json = _gtp(allowed_tools=allowed_tools)
             split_marker = "AVAILABLE SAP TOOLS (for MODE 1)"
-            if split_marker in self.system_prompt:
-                system_prompt = self.system_prompt.split(split_marker)[0]
+            if split_marker in system_prompt:
+                system_prompt = system_prompt.split(split_marker)[0]
                 system_prompt += f"{split_marker}\n{'═' * 35}\n{tools_json}\n\n"
                 system_prompt += "CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with natural language text."
 
@@ -1205,7 +1119,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                     full_text += token
                     yield _sse("answer", {"delta": token})
 
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": full_text})
                 if len(self.conversation_history) > 20:
@@ -1264,7 +1178,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
                     full_text += token
                     yield _sse("answer", {"delta": token})
 
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": full_text})
                 if len(self.conversation_history) > 20:
@@ -1280,7 +1194,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         # Action plan intent
         action_plan = self._extract_action_plan(llm_response)
         if action_plan:
-            if not self._use_mlx:
+            if not is_trained_model:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": llm_response})
                 if len(self.conversation_history) > 20:
@@ -1294,7 +1208,7 @@ CRITICAL: Output ONLY one of the three modes per response. Never mix JSON with n
         cloud_response = self._call_cloud_primary(messages)
         final_response = cloud_response if cloud_response else llm_response
 
-        if not self._use_mlx:
+        if not is_trained_model:
             self.conversation_history.append({"role": "user", "content": user_message})
             self.conversation_history.append({"role": "assistant", "content": final_response})
             if len(self.conversation_history) > 20:

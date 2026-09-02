@@ -5,19 +5,32 @@ Tests the keyword fallback router and tool extraction — no Ollama required.
 import sys
 import json
 
-# ── patch out the LLM so tests run without Ollama ────────────────────────────
 import unittest
 from unittest.mock import patch, MagicMock
 
-# Prevent real HTTP calls during import
-with patch("requests.get", return_value=MagicMock(status_code=404)):
-    from agent.sap_agent import SAPAgent
+from agent.sap_agent import SAPAgent
+from ai.manager import AIProviderManager
+from ai.router import ModelRouter
+from ai.types import Capability, Purpose, TenantPolicy
+from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
 
-def make_agent():
-    with patch("requests.get", return_value=MagicMock(status_code=404)):
-        agent = SAPAgent()
-    agent._use_mlx = False
-    return agent
+
+def make_agent(prompt_profile="registry_tool_json"):
+    """Create a test agent with an injected manager."""
+    store = InMemoryConfigStore()
+    store.add_provider(make_provider_row(id="p1", base_url="http://127.0.0.1:1"))
+    store.add_model(
+        make_model_row(id="m1", provider_id="p1", purpose=Purpose.CHAT,
+                       prompt_profile=prompt_profile, model_identifier="test-model"),
+        capabilities={Capability.CHAT, Capability.STREAMING},
+    )
+    store.set_policy(TenantPolicy(
+        tenant_id="default", allow_user_selection=False, fallback_enabled=False,
+        default_chat_model_id="m1", default_embedding_model_id=None,
+        default_reranker_model_id=None,
+    ))
+    manager = AIProviderManager(store=store, router=ModelRouter(store))
+    return SAPAgent(manager=manager)
 
 
 # ── Keyword fallback router tests ─────────────────────────────────────────────
