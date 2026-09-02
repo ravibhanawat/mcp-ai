@@ -206,8 +206,9 @@ app = FastAPI(
 app.include_router(_oauth_router)
 
 # Mount AI provider administration endpoints
-from api.routes_ai_admin import router as _ai_admin_router
+from api.routes_ai_admin import router as _ai_admin_router, user_router as _ai_user_router
 app.include_router(_ai_admin_router)
+app.include_router(_ai_user_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -384,7 +385,10 @@ class ChatRequest(BaseModel):
     # Length caps keep a single request from occupying a worker (finding F-10)
     # and bound every downstream regex, LLM call and log write.
     message: str = Field(..., max_length=8000)
-    model: str = Field("llama3.2", max_length=128)
+    # An id from GET /ai/models/available, not a free-text model name. The
+    # router validates it against the tenant allowlist and ignores it when user
+    # selection is disabled, so a client cannot reach an unoffered model.
+    model_id: str | None = Field(None, max_length=36)
     session_id: str = Field("default", max_length=200)
     clarification_answer: str | None = Field(None, max_length=2000)
     confirm_token: str | None = Field(None, max_length=256)   # confirms a pending write
@@ -688,19 +692,25 @@ async def chat(
     user_roles = current_user.get("roles", [])
     client_ip  = request.client.host if request.client else "unknown"
 
+    # ── Resolve the model through the router (applies policy gate) ──
+    agent_session_id = f"{user_id}:{body.session_id}"
+    import asyncio as _aio
+    agent = await _aio.to_thread(_get_agent, agent_session_id)
+    agent.requested_model_id = body.model_id
+    from ai.types import Purpose
+    resolution = agent.manager.resolve_only(
+        tenant_id="default", purpose=Purpose.CHAT, requested_model_id=body.model_id
+    )
+    resolved_model_id = resolution.resolved.model.id
+
     # ── Cache lookup (per-user; skipped for clarification follow-ups) ──
     from core import redis_cache
     from core.security import redact_secrets, classify_for_cache
-    _cache_key = redis_cache.make_key("chat", body.message, body.model, ",".join(sorted(user_roles)))
+    _cache_key = redis_cache.make_key("chat", body.message, resolved_model_id, ",".join(sorted(user_roles)))
     if not body.clarification_answer:
         _cached = redis_cache.get("chat", user_id, _cache_key)
         if _cached:
             return ChatResponse(**_cached)
-
-    import asyncio as _aio
-    agent = await _aio.to_thread(_get_agent, f"{user_id}:{body.session_id}")
-    if body.model != agent.model:
-        agent.model = body.model
 
     t_start       = time.monotonic()
     tool_called   = None
@@ -937,9 +947,15 @@ async def chat_stream(
     user_roles = current_user.get("roles", [])
     client_ip  = request.client.host if request.client else "unknown"
 
-    agent = await asyncio.to_thread(_get_agent, f"{user_id}:{body.session_id}")
-    if body.model != agent.model:
-        agent.model = body.model
+    # ── Resolve the model through the router (applies policy gate) ──
+    agent_session_id = f"{user_id}:{body.session_id}"
+    agent = await asyncio.to_thread(_get_agent, agent_session_id)
+    agent.requested_model_id = body.model_id
+    from ai.types import Purpose
+    resolution = agent.manager.resolve_only(
+        tenant_id="default", purpose=Purpose.CHAT, requested_model_id=body.model_id
+    )
+    resolved_model_id = resolution.resolved.model.id
 
     allowed_tools = get_allowed_tools(user_roles) if _AUTH_ENABLED else None
 
@@ -1010,7 +1026,7 @@ async def chat_stream(
                     "abap_check": None, "abap_code": abap_code_payload,
                     "show_visualization": False,
                     "duration_ms": int((time.monotonic() - t_start) * 1000),
-                    "model": body.model,
+                    "model": resolved_model_id,
                 })
                 return
 
@@ -1058,7 +1074,7 @@ async def chat_stream(
                         "abap_check": abap_check_payload, "abap_code": None,
                         "show_visualization": False,
                         "duration_ms": int((time.monotonic() - t_start) * 1000),
-                        "model": body.model,
+                        "model": resolved_model_id,
                     })
                     return
 
@@ -1091,7 +1107,7 @@ async def chat_stream(
                             "abap_check": None, "abap_code": None,
                             "show_visualization": _show_viz,
                             "duration_ms": int((time.monotonic() - t_start) * 1000),
-                            "model": body.model,
+                            "model": resolved_model_id,
                         })
                         return
                 except Exception:
@@ -1115,7 +1131,7 @@ async def chat_stream(
                         sap_source   = done_data.get("sap_source")
                         done_data["show_visualization"] = _show_viz
                         done_data["duration_ms"] = int((time.monotonic() - t_start) * 1000)
-                        done_data["model"] = body.model
+                        done_data["model"] = resolved_model_id
                         yield f"event: done\ndata: {json.dumps(done_data, cls=_JsonEncoder)}\n\n"
                     except Exception:
                         yield event_str

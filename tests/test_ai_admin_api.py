@@ -235,5 +235,82 @@ class TestModelCreation(unittest.TestCase):
         self.assertEqual(422, resp.status_code)
 
 
+class TestPolicyAndRouting(unittest.TestCase):
+
+    def test_setting_a_default_model_writes_the_policy_row(self):
+        captured = {}
+        with patch("api.routes_ai_admin._upsert_policy_row",
+                   side_effect=lambda v: captured.update(v)), \
+             patch("api.routes_ai_admin._invalidate"), \
+             patch("api.routes_ai_admin._policy_out", return_value={}):
+            resp = client_as(["admin"]).put("/admin/ai/policy", json={
+                "allow_user_selection": True, "fallback_enabled": True,
+                "default_chat_model_id": "m1",
+            })
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual("m1", captured["default_chat_model_id"])
+
+    def test_replacing_the_fallback_chain_preserves_the_submitted_order(self):
+        written = []
+        with patch("api.routes_ai_admin._delete_rules"), \
+             patch("api.routes_ai_admin._insert_rule", side_effect=lambda v: written.append(v)), \
+             patch("api.routes_ai_admin._invalidate"), \
+             patch("api.routes_ai_admin._rules_out", return_value=[]):
+            resp = client_as(["admin"]).put("/admin/ai/fallback", json={
+                "chains": [{"purpose": "CHAT", "model_ids": ["m2", "m3"]}]
+            })
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual(["m2", "m3"], [w["model_id"] for w in written])
+        self.assertEqual([0, 1], [w["priority"] for w in written])
+
+
+class TestUserFacingModelList(unittest.TestCase):
+    """Requirement 9: the list a user sees is the list an admin permitted."""
+
+    def test_returns_nothing_when_user_selection_is_disabled(self):
+        from ai.types import TenantPolicy
+        policy = TenantPolicy("default", False, True, "m1", None, None)
+        with patch("api.routes_ai_admin._store_for_user") as store:
+            store.return_value.get_policy.return_value = policy
+            resp = client_as(["fi_co_analyst"]).get("/ai/models/available")
+        self.assertEqual(200, resp.status_code)
+        self.assertEqual([], resp.json()["models"])
+        self.assertFalse(resp.json()["selection_enabled"])
+
+    def test_lists_only_models_marked_user_selectable(self):
+        from ai.types import Capability, Purpose, TenantPolicy
+        from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1"))
+        for mid in ("open", "restricted"):
+            store.add_model(
+                make_model_row(id=mid, provider_id="p1", purpose=Purpose.CHAT),
+                capabilities={Capability.CHAT},
+            )
+        store.set_tenant_model("default", "open", user_selectable=True)
+        store.set_policy(TenantPolicy("default", True, True, "open", None, None))
+
+        with patch("api.routes_ai_admin._store_for_user", return_value=store):
+            resp = client_as(["fi_co_analyst"]).get("/ai/models/available")
+        self.assertEqual(["open"], [m["id"] for m in resp.json()["models"]])
+
+    def test_the_response_exposes_no_provider_credentials_or_urls(self):
+        """A normal user has no business seeing infrastructure detail."""
+        from ai.types import Capability, Purpose, TenantPolicy
+        from tests.fakes.fake_store import InMemoryConfigStore, make_model_row, make_provider_row
+
+        store = InMemoryConfigStore()
+        store.add_provider(make_provider_row(id="p1", base_url="http://secret-host:11434"))
+        store.add_model(make_model_row(id="open", provider_id="p1"), {Capability.CHAT})
+        store.set_tenant_model("default", "open", user_selectable=True)
+        store.set_policy(TenantPolicy("default", True, True, "open", None, None))
+
+        with patch("api.routes_ai_admin._store_for_user", return_value=store):
+            body = json.dumps(client_as(["read_only"]).get("/ai/models/available").json())
+        self.assertNotIn("secret-host", body)
+        self.assertNotIn("base_url", body)
+
+
 if __name__ == "__main__":
     unittest.main()

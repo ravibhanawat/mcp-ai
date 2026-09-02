@@ -533,3 +533,194 @@ def test_model(model_id: str, admin: dict = Depends(require_admin)) -> dict:
     result = probe(resolved, read_credential(resolved.provider.id, DEFAULT_TENANT))
     record_health(model_id, DEFAULT_TENANT, result)
     return {"status": result.status, "latency_ms": result.latency_ms, "error": result.error}
+
+
+# ── routing, fallback, policy ─────────────────────────────────────────────────
+
+class PolicyIn(BaseModel):
+    allow_user_selection: bool = False
+    fallback_enabled: bool = True
+    default_chat_model_id: str | None = None
+    default_embedding_model_id: str | None = None
+    default_reranker_model_id: str | None = None
+
+
+class RuleIn(BaseModel):
+    rule_type: str            # 'purpose' | 'intent'
+    match_key: str
+    model_id: str
+    priority: int = 100
+
+
+class RoutingIn(BaseModel):
+    rules: list[RuleIn]
+
+
+class ChainIn(BaseModel):
+    purpose: Purpose
+    model_ids: list[str]
+
+
+class FallbackIn(BaseModel):
+    chains: list[ChainIn]
+
+
+def _upsert_policy_row(values: dict) -> None:
+    from db.connection import execute
+    execute(
+        """INSERT INTO ai_tenant_policy
+               (tenant_id, allow_user_selection, fallback_enabled, default_chat_model_id,
+                default_embedding_model_id, default_reranker_model_id)
+           VALUES (%(tenant_id)s, %(allow_user_selection)s, %(fallback_enabled)s,
+                   %(default_chat_model_id)s, %(default_embedding_model_id)s,
+                   %(default_reranker_model_id)s)
+           ON CONFLICT (tenant_id) DO UPDATE SET
+               allow_user_selection       = EXCLUDED.allow_user_selection,
+               fallback_enabled           = EXCLUDED.fallback_enabled,
+               default_chat_model_id      = EXCLUDED.default_chat_model_id,
+               default_embedding_model_id = EXCLUDED.default_embedding_model_id,
+               default_reranker_model_id  = EXCLUDED.default_reranker_model_id,
+               updated_at                 = NOW()""",
+        values,
+    )
+
+
+def _delete_rules(tenant_id: str, rule_types: list[str]) -> None:
+    from db.connection import execute
+    execute(
+        "DELETE FROM ai_model_routing WHERE tenant_id = %s AND rule_type = ANY(%s)",
+        (tenant_id, rule_types),
+    )
+
+
+def _insert_rule(values: dict) -> None:
+    from db.connection import execute
+    execute(
+        """INSERT INTO ai_model_routing
+               (id, tenant_id, rule_type, match_key, model_id, priority, is_active)
+           VALUES (%(id)s, %(tenant_id)s, %(rule_type)s, %(match_key)s, %(model_id)s,
+                   %(priority)s, TRUE)""",
+        values,
+    )
+
+
+def _rules_out(rule_types: list[str]) -> list[dict]:
+    store = get_store()
+    out = []
+    for rule_type in rule_types:
+        for rule in store.get_routing_rules(DEFAULT_TENANT, rule_type):
+            out.append({
+                "id": rule.id, "rule_type": rule.rule_type, "match_key": rule.match_key,
+                "model_id": rule.model_id, "priority": rule.priority,
+            })
+    return out
+
+
+def _policy_out() -> dict:
+    return get_store().get_policy(DEFAULT_TENANT).__dict__
+
+
+@router.get("/policy")
+def get_policy(admin: dict = Depends(require_admin)) -> dict:
+    return _policy_out()
+
+
+@router.put("/policy")
+def put_policy(body: PolicyIn, admin: dict = Depends(require_admin)) -> dict:
+    _upsert_policy_row({"tenant_id": DEFAULT_TENANT, **body.model_dump()})
+    _invalidate()
+    return _policy_out()
+
+
+@router.get("/routing")
+def get_routing(admin: dict = Depends(require_admin)) -> dict:
+    return {"rules": _rules_out(["purpose", "intent"])}
+
+
+@router.put("/routing")
+def put_routing(body: RoutingIn, admin: dict = Depends(require_admin)) -> dict:
+    """Replaces all purpose and intent rules. Fallback rules are untouched."""
+    _delete_rules(DEFAULT_TENANT, ["purpose", "intent"])
+    for rule in body.rules:
+        _insert_rule({
+            "id": str(uuid.uuid4()), "tenant_id": DEFAULT_TENANT,
+            "rule_type": rule.rule_type, "match_key": rule.match_key,
+            "model_id": rule.model_id, "priority": rule.priority,
+        })
+    _invalidate()
+    return {"rules": _rules_out(["purpose", "intent"])}
+
+
+@router.get("/fallback")
+def get_fallback(admin: dict = Depends(require_admin)) -> dict:
+    return {"rules": _rules_out(["fallback"])}
+
+
+@router.put("/fallback")
+def put_fallback(body: FallbackIn, admin: dict = Depends(require_admin)) -> dict:
+    """Replaces every fallback chain. List order is the failover order."""
+    _delete_rules(DEFAULT_TENANT, ["fallback"])
+    for chain in body.chains:
+        for priority, model_id in enumerate(chain.model_ids):
+            _insert_rule({
+                "id": str(uuid.uuid4()), "tenant_id": DEFAULT_TENANT,
+                "rule_type": "fallback", "match_key": chain.purpose.value,
+                "model_id": model_id, "priority": priority,
+            })
+    _invalidate()
+    return {"rules": _rules_out(["fallback"])}
+
+
+@router.get("/health")
+def health_overview(admin: dict = Depends(require_admin)) -> dict:
+    from db.connection import query_all
+    rows = query_all(
+        """SELECT h.model_id, m.model_name, p.name AS provider_name, h.status,
+                  h.latency_ms, h.checked_at, h.last_success_at, h.last_error
+             FROM ai_model_health h
+             JOIN ai_models m    ON m.id = h.model_id
+             JOIN ai_providers p ON p.id = m.provider_id
+            WHERE h.tenant_id = %s
+            ORDER BY m.model_name""",
+        (DEFAULT_TENANT,),
+    )
+    return {"models": rows}
+
+
+@router.get("/usage")
+def usage(limit: int = 100, admin: dict = Depends(require_admin)) -> dict:
+    from db.connection import query_all
+    rows = query_all(
+        "SELECT * FROM ai_usage_logs WHERE tenant_id = %s ORDER BY created_at DESC LIMIT %s",
+        (DEFAULT_TENANT, min(limit, 500)),
+    )
+    return {"entries": rows}
+
+
+# ── user-facing ───────────────────────────────────────────────────────────────
+
+user_router = APIRouter(tags=["ai"])
+
+
+def _store_for_user():
+    return get_store()
+
+
+@user_router.get("/ai/models/available")
+def available_models(current_user: dict = Depends(get_current_user)) -> dict:
+    """Models this caller may select.
+
+    Returns an empty list when selection is disabled. Exposes only id, name and
+    purpose — a normal user has no reason to see a provider's URL, its type, or
+    anything else about the infrastructure.
+    """
+    store = _store_for_user()
+    policy = store.get_policy(DEFAULT_TENANT)
+    if not policy.allow_user_selection:
+        return {"selection_enabled": False, "models": []}
+    models = [
+        {"id": m.id, "name": m.model_name, "purpose": m.purpose.value}
+        for m in store.list_models(DEFAULT_TENANT, active_only=True)
+        if store.is_user_selectable(DEFAULT_TENANT, m.id)
+    ]
+    return {"selection_enabled": True, "models": models}
