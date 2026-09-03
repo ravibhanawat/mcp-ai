@@ -54,3 +54,8 @@ training/
 *.pkl
 *.model
 docs/**
+# Claude Code worktrees — scratch working copies, never part of the repo
+.claude/worktrees/
+
+# Subagent-driven-development scratch workspaces (ledger, briefs, review packages)
+.superpowers/
