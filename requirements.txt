@@ -18,3 +18,7 @@ tiktoken>=0.7.0
 redis>=5.0.0
 # AI provider credential encryption at rest (core/crypto.py)
 cryptography>=42.0.0
+# Test tooling. pytest-timeout is not optional: without a per-test cap a single
+# hanging test stalls a CI run with no diagnostic (see pytest.ini).
+pytest>=8.0.0
+pytest-timeout>=2.3.0

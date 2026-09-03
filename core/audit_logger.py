@@ -15,20 +15,48 @@ Fields logged:
   sap_source, response_summary (first 200 chars, redacted), duration_ms, status
 """
 import json
+import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
 
 class _SafeEncoder(json.JSONEncoder):
-    """JSON encoder that handles types not serializable by default (e.g. Decimal)."""
+    """JSON encoder for the types a SAP row actually contains.
+
+    psycopg returns real Python objects for PostgreSQL column types, so a
+    tool result routinely carries `date` (posting dates, delivery dates),
+    `datetime`, `Decimal` (amounts) and `UUID`. Handling only Decimal meant a
+    single dated invoice raised TypeError here — inside log_request(), which
+    /chat calls from a `finally:` block — and that turned a successful SAP
+    lookup into a 500 while also losing the audit record for it.
+
+    The final `str(o)` fallback is deliberate: an audit record must be written
+    even for a type nobody anticipated. Describing a request is never worth
+    failing it.
+    """
     def default(self, o):
         if isinstance(o, Decimal):
             return float(o)
-        return super().default(o)
+        if isinstance(o, (datetime, date, time)):
+            return o.isoformat()
+        if isinstance(o, timedelta):
+            return o.total_seconds()
+        if isinstance(o, uuid.UUID):
+            return str(o)
+        if isinstance(o, (bytes, bytearray, memoryview)):
+            return bytes(o).decode("utf-8", "replace")
+        if isinstance(o, (set, frozenset)):
+            return sorted(str(x) for x in o)
+        try:
+            return super().default(o)
+        except TypeError:
+            return str(o)
+
+_logger = logging.getLogger("core.audit_logger")
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
@@ -124,8 +152,16 @@ def log_request(
         "duration_ms":      duration_ms,
         "status":           status,
     }
-    with open(_log_file(), "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, cls=_SafeEncoder) + "\n")
+    # The disk write is best-effort, exactly like the DB write below it.
+    # /chat calls this from a `finally:` block, so anything raised here
+    # replaces the response the caller was about to receive — an unwritable
+    # log directory or a full disk would turn every successful SAP lookup into
+    # a 500. Log the failure loudly and let the request finish.
+    try:
+        with open(_log_file(), "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, cls=_SafeEncoder) + "\n")
+    except Exception as exc:
+        _logger.error("Audit record %s could not be written to disk: %s", rid, exc)
 
     # Dual-write to DB (best-effort)
     try:

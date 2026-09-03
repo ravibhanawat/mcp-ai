@@ -361,4 +361,55 @@ def set_active(user_id: str, active: bool) -> None:
 
 def _public_user(u: dict) -> dict[str, Any]:
     """Strip sensitive fields before returning to API callers."""
-    return {k: v for k, v in u.items() if k not in ("password_hash", "salt")}
+    return {k: v for k, v in u.items()
+            if k not in ("password_hash", "salt", "refresh_jtis")}
+
+
+# ── Refresh-token rotation state ──────────────────────────────────────────────
+#
+# One entry per live login session, so signing in on a second device does not
+# sign the first one out. /auth/refresh accepts a token only if its jti is
+# still in this list, and swaps that entry for the new token's jti — which is
+# what makes rotation mean something. Replaying a jti that has already been
+# swapped out is the standard refresh-token-theft signal, and the caller
+# responds by clearing the whole list.
+
+_MAX_SESSIONS_PER_USER = 10
+
+
+def get_refresh_jtis(user_id: str) -> list[str]:
+    """Return the jtis of this user's currently valid refresh tokens."""
+    user = _load().get(user_id)
+    return list(user.get("refresh_jtis") or []) if user else []
+
+
+def set_refresh_jtis(user_id: str, jtis: list[str]) -> None:
+    """Replace the set of valid refresh-token jtis for a user."""
+    users = _load()
+    if user_id not in users:
+        return
+    users[user_id]["refresh_jtis"] = list(jtis)[-_MAX_SESSIONS_PER_USER:]
+    _save(users)
+
+
+def record_refresh_jti(user_id: str, jti: str) -> None:
+    """Add a newly issued refresh token to the valid set (a fresh login)."""
+    set_refresh_jtis(user_id, [*get_refresh_jtis(user_id), jti])
+
+
+def rotate_refresh_jti(user_id: str, old_jti: str, new_jti: str) -> bool:
+    """Swap `old_jti` for `new_jti`. False if `old_jti` was not valid.
+
+    A False return means the presented token had already been rotated away —
+    treat it as a compromised chain, not a retry.
+    """
+    current = get_refresh_jtis(user_id)
+    if old_jti not in current:
+        return False
+    set_refresh_jtis(user_id, [j for j in current if j != old_jti] + [new_jti])
+    return True
+
+
+def revoke_all_refresh_tokens(user_id: str) -> None:
+    """Invalidate every refresh token for a user (logout-everywhere, or theft)."""
+    set_refresh_jtis(user_id, [])

@@ -24,6 +24,7 @@ import secrets
 import sys
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from threading import Lock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,6 +44,7 @@ from pydantic import BaseModel, Field
 from typing import Any
 
 from agent.sap_agent import SAPAgent, _DecimalEncoder as _JsonEncoder
+from ai.errors import AIError
 from tools.tool_registry import TOOLS, get_sap_source
 from core.config_manager import config
 from core.audit_logger import get_recent_logs, list_log_files, log_request
@@ -272,18 +274,40 @@ class _ActivityMiddleware(BaseHTTPMiddleware):
 
                     client_ip = _client_ip(request)
 
-                    _write_activity(
-                        request_id=rid,
-                        user_id=user_id,
-                        client_ip=client_ip,
-                        method=request.method,
-                        endpoint=path,
-                        status_code=status_code,
-                        status="error" if (error_msg or status_code >= 400) else "ok",
-                        duration_ms=duration,
-                        error_message=error_msg,
-                        log_source="middleware",
-                    )
+                    # _write_activity is a *synchronous* psycopg call. Awaiting
+                    # it on the event loop — which is what calling it directly
+                    # from this async method did — blocked the whole worker for
+                    # as long as the pool took to hand over a connection. With
+                    # the database unreachable that was the pool's full acquire
+                    # timeout, on every request, so a database outage became a
+                    # total outage: /health and / stopped answering too, and the
+                    # process no longer responded to SIGTERM.
+                    #
+                    # to_thread keeps it off the loop; the shield-free await
+                    # still lets a caller disconnect without stranding the
+                    # write. Activity logging is best-effort, so a failure here
+                    # is logged and swallowed rather than raised into a
+                    # response that has already been produced.
+                    import asyncio as _aio
+                    try:
+                        await _aio.to_thread(
+                            _write_activity,
+                            request_id=rid,
+                            user_id=user_id,
+                            client_ip=client_ip,
+                            method=request.method,
+                            endpoint=path,
+                            status_code=status_code,
+                            status="error" if (error_msg or status_code >= 400) else "ok",
+                            duration_ms=duration,
+                            error_message=error_msg,
+                            log_source="middleware",
+                        )
+                    except Exception as _log_exc:
+                        _logger.warning(
+                            "Activity log write failed for %s %s: %s",
+                            request.method, path, _log_exc,
+                        )
         return response
 
 
@@ -301,6 +325,15 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
             "Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        # The API serves JSON, not markup, so it can afford a strict policy:
+        # nothing loads, nothing frames it, nothing is posted anywhere. This is
+        # the layer that contains an injected-content bug rather than relying on
+        # every renderer downstream being careful for ever.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; "
+            "form-action 'none'",
+        )
         if not _IS_DEV:
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -357,6 +390,16 @@ _MAX_SESSIONS  = 500          # evict oldest when pool exceeds this
 _session_agents: dict[str, SAPAgent] = {}
 _session_order: list[str] = []   # insertion order for eviction
 _session_lock  = Lock()
+
+def _agent_key(user_id: str, session_id: str) -> str:
+    """The one place a session-pool key is built.
+
+    Every caller must agree on this. /chat composed it inline while
+    DELETE /conversations used the bare session_id, so the delete never
+    matched and a conversation's transcript outlived its deletion.
+    """
+    return f"{user_id}:{session_id}"
+
 
 def _make_agent() -> SAPAgent:
     return SAPAgent(tenant_id="default")
@@ -500,6 +543,11 @@ def login(body: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     access_tok  = create_token(user["user_id"], user["roles"])
     refresh_tok = create_refresh_token(user["user_id"])
+    # Register this session's refresh token so /auth/refresh can tell a live
+    # token from one it has already rotated away.
+    user_store.record_refresh_jti(
+        user["user_id"], _jwt.decode(refresh_tok, options={"verify_signature": False})["jti"]
+    )
     response = {
         "access_token":  access_tok,
         "refresh_token": refresh_tok,
@@ -522,8 +570,27 @@ def refresh_token_endpoint(body: RefreshRequest):
         user        = user_store.get_user(payload["sub"])
         if not user or not user.get("active", True):
             raise HTTPException(status_code=401, detail="User not found or inactive.")
-        new_access  = create_token(user["user_id"], user["roles"])
+
         new_refresh = create_refresh_token(user["user_id"])
+        new_jti     = _jwt.decode(new_refresh, options={"verify_signature": False})["jti"]
+
+        # Rotation only contains a stolen token if the token it replaces stops
+        # working. Previously both remained valid, so a captured refresh token
+        # was good for its full lifetime and reuse of a superseded one — the
+        # canonical theft signal — was invisible.
+        if not user_store.rotate_refresh_jti(user["user_id"], payload["jti"], new_jti):
+            user_store.revoke_all_refresh_tokens(user["user_id"])
+            _logger.warning(
+                "Refresh token replay for user %s — every refresh token for "
+                "this account has been revoked.", user["user_id"],
+            )
+            raise HTTPException(
+                status_code=401,
+                detail="This refresh token has already been used. All sessions "
+                       "have been signed out; please log in again.",
+            )
+
+        new_access  = create_token(user["user_id"], user["roles"])
         return {
             "access_token":  new_access,
             "refresh_token": new_refresh,
@@ -594,6 +661,11 @@ def deactivate_user(user_id: str, admin: dict = Depends(require_admin)):
     """Deactivate a user account and revoke their MCP key (admin only)."""
     try:
         user_store.set_active(user_id, False)
+        # "No lingering access" means every credential, not just the MCP key:
+        # the refresh tokens go too, and get_current_user re-checks `active` on
+        # every request so the access token already issued stops working now
+        # rather than whenever it happens to expire.
+        user_store.revoke_all_refresh_tokens(user_id)
         # Revoke MCP key automatically — no lingering access
         keys  = _load_mcp_keys()
         label = f"user:{user_id}"
@@ -605,81 +677,79 @@ def deactivate_user(user_id: str, admin: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/auth/users/{user_id}/mcp-setup")
-def get_user_mcp_setup(user_id: str, admin: dict = Depends(require_admin)):
+_MCP_INSTRUCTIONS = [
+    "1. Open: ~/Library/Application Support/Claude/claude_desktop_config.json",
+    "2. Merge the 'mcpServers' block into that file.",
+    "3. Fully quit and reopen Claude Desktop (Cmd+Q).",
+    "4. Click the hammer icon in Claude Desktop chat — SAP tools will appear.",
+]
+
+
+def _mcp_setup_payload(user_id: str, *, rotate: bool) -> dict:
+    """Build a Claude Desktop config, minting a key only when asked to.
+
+    Only the key's hash is stored, so an existing key can never be shown
+    again — the page can either display a key or preserve the one already in
+    use, not both. Reading used to silently choose "display", which meant a
+    refresh, a back-button or a browser prefetch revoked the key the user had
+    just finished pasting into Claude Desktop, with nothing to indicate it had
+    happened. Reading now preserves; rotating is an explicit POST.
     """
-    Return a ready-to-paste Claude Desktop config for the user.
-    If the user has no MCP key yet, generate one now.
-    """
-    keys  = _load_mcp_keys()
-    label = f"user:{user_id}"
-    if label not in keys:
-        # Generate on demand (e.g. existing users created before this feature)
-        mcp_raw     = "mcp_" + secrets.token_hex(24)
-        keys[label] = _hash_key(mcp_raw)
-        _save_mcp_keys(keys)
-    else:
-        # Key exists but we can't return the raw value — must regenerate
+    keys    = _load_mcp_keys()
+    label   = f"user:{user_id}"
+    existed = label in keys
+    mcp_raw = None
+    if rotate or not existed:
         mcp_raw     = "mcp_" + secrets.token_hex(24)
         keys[label] = _hash_key(mcp_raw)
         _save_mcp_keys(keys)
 
     server_url = os.environ.get("SERVER_URL", "http://localhost:8000").rstrip("/")
-    claude_cfg = {
-        "mcpServers": {
-            "sap-ai-agent": {
-                "url": f"{server_url}/mcp/sse",
-                "headers": {"X-MCP-Key": mcp_raw},
-            }
-        }
-    }
+    headers    = {"X-MCP-Key": mcp_raw or "<your existing key>"}
     return {
         "user_id":    user_id,
         "mcp_key":    mcp_raw,
+        "has_key":    existed or mcp_raw is not None,
+        "rotated":    rotate and existed,
         "server_url": server_url,
-        "claude_desktop_config": claude_cfg,
-        "instructions": [
-            f"1. Open: ~/Library/Application Support/Claude/claude_desktop_config.json",
-            "2. Merge the 'mcpServers' block into that file.",
-            "3. Fully quit and reopen Claude Desktop (Cmd+Q).",
-            "4. Click the hammer icon in Claude Desktop chat — SAP tools will appear.",
-        ],
+        "claude_desktop_config": {
+            "mcpServers": {"sap-ai-agent": {"url": f"{server_url}/mcp/sse",
+                                            "headers": headers}}
+        },
+        "message": (
+            "A new key was generated. The previous one no longer works."
+            if rotate and existed else
+            "Your key is stored as a hash and cannot be shown again. "
+            "Generate a new one if you have lost it."
+            if mcp_raw is None else
+            "This is your MCP key. Copy it now — it cannot be shown again."
+        ),
+        "instructions": _MCP_INSTRUCTIONS,
     }
+
+
+@app.get("/auth/users/{user_id}/mcp-setup")
+def get_user_mcp_setup(user_id: str, admin: dict = Depends(require_admin)):
+    """Show a user's Claude Desktop config, without disturbing their key."""
+    return _mcp_setup_payload(user_id, rotate=False)
+
+
+@app.post("/auth/users/{user_id}/mcp-setup")
+def rotate_user_mcp_key(user_id: str, admin: dict = Depends(require_admin)):
+    """Issue a new MCP key for a user. Revokes the previous one."""
+    return _mcp_setup_payload(user_id, rotate=True)
 
 
 @app.get("/mcp/my-setup")
 def get_my_mcp_setup(current_user: dict = Depends(get_current_user)):
-    """
-    Self-service: logged-in user gets their own Claude Desktop config.
-    Regenerates their MCP key — invalidates the old one.
-    """
-    user_id = current_user["user_id"]
-    keys    = _load_mcp_keys()
-    label   = f"user:{user_id}"
-    mcp_raw = "mcp_" + secrets.token_hex(24)
-    keys[label] = _hash_key(mcp_raw)
-    _save_mcp_keys(keys)
+    """Self-service: your own Claude Desktop config. Does not touch your key."""
+    return _mcp_setup_payload(current_user["user_id"], rotate=False)
 
-    server_url = os.environ.get("SERVER_URL", "http://localhost:8000").rstrip("/")
-    claude_cfg = {
-        "mcpServers": {
-            "sap-ai-agent": {
-                "url": f"{server_url}/mcp/sse",
-                "headers": {"X-MCP-Key": mcp_raw},
-            }
-        }
-    }
-    return {
-        "mcp_key":    mcp_raw,
-        "server_url": server_url,
-        "claude_desktop_config": claude_cfg,
-        "instructions": [
-            "1. Open: ~/Library/Application Support/Claude/claude_desktop_config.json",
-            "2. Merge the 'mcpServers' block into that file.",
-            "3. Fully quit and reopen Claude Desktop (Cmd+Q).",
-            "4. Click the hammer icon in Claude Desktop chat — SAP tools will appear.",
-        ],
-    }
+
+@app.post("/mcp/my-setup")
+def rotate_my_mcp_key(current_user: dict = Depends(get_current_user)):
+    """Issue yourself a new MCP key. Revokes the previous one."""
+    return _mcp_setup_payload(current_user["user_id"], rotate=True)
 
 
 def _resolve_chat_model_or_503(agent, model_id: str | None):
@@ -762,7 +832,7 @@ async def chat(
     client_ip  = request.client.host if request.client else "unknown"
 
     # ── Resolve the model through the router (applies policy gate) ──
-    agent_session_id = f"{user_id}:{body.session_id}"
+    agent_session_id = _agent_key(user_id, body.session_id)
     import asyncio as _aio
     agent = await _aio.to_thread(_get_agent, agent_session_id)
     agent.requested_model_id = body.model_id
@@ -911,6 +981,24 @@ async def chat(
 
     except HTTPException:
         raise
+    except AIError as exc:
+        # Every model in the fallback chain failed. That is the AI service
+        # being unavailable, not this server being broken, and answering 500
+        # told the user "internal error" while telling a dashboard nothing
+        # actionable. _resolve_chat_model_or_503 already draws this
+        # distinction for *resolution* failures; dispatch failures get the
+        # same treatment. The provider's own message is logged but not
+        # returned — it carries endpoint URLs and credential detail.
+        err_status = "error"
+        _logger.error(
+            "All AI providers failed for user %s (%s: %s)", user_id, exc.code, exc
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="No AI model is currently able to answer. Every configured "
+                   "provider failed. Contact your administrator; this is not "
+                   "caused by your request.",
+        )
     except Exception:
         err_status = "error"
         _logger.exception("Unhandled error in /chat for user %s", user_id)
@@ -1014,7 +1102,7 @@ async def chat_stream(
     client_ip  = request.client.host if request.client else "unknown"
 
     # ── Resolve the model through the router (applies policy gate) ──
-    agent_session_id = f"{user_id}:{body.session_id}"
+    agent_session_id = _agent_key(user_id, body.session_id)
     agent = await asyncio.to_thread(_get_agent, agent_session_id)
     agent.requested_model_id = body.model_id
     resolution = _resolve_chat_model_or_503(agent, body.model_id)
@@ -1318,8 +1406,12 @@ def audit_logs(
     status:     str | None = None,   # 'ok' | 'error'
     method:     str | None = None,
     log_source: str | None = None,   # 'audit' | 'middleware'
-    from_ts:    str | None = None,   # ISO datetime string
-    to_ts:      str | None = None,
+    # Typed rather than str: an unparseable value used to sail through to SQL,
+    # where "timestamp >= 'not-a-date'" filtered everything out and the caller
+    # got 200 with total: 0. An auditor reading that concludes there was no
+    # activity in the window. FastAPI now answers 422 on a bad value.
+    from_ts:    datetime | None = None,
+    to_ts:      datetime | None = None,
     # Pagination
     limit:  int = 100,
     offset: int = 0,
@@ -1364,8 +1456,8 @@ def audit_logs(
 
 @app.get("/audit/stats")
 def audit_stats(
-    from_ts: str | None = None,
-    to_ts:   str | None = None,
+    from_ts: datetime | None = None,   # see audit_logs() above
+    to_ts:   datetime | None = None,
     admin: dict = Depends(require_admin),
 ):
     """
@@ -1381,8 +1473,8 @@ def audit_stats(
 def my_logs(
     limit:  int = 50,
     offset: int = 0,
-    from_ts: str | None = None,
-    to_ts:   str | None = None,
+    from_ts: datetime | None = None,   # see audit_logs() above
+    to_ts:   datetime | None = None,
     current_user: dict = Depends(get_current_user),
 ):
     """Return the current user's own activity logs with optional date range."""
@@ -1448,7 +1540,7 @@ async def kutty_ask(
 def reset(request: ChatRequest | None = None, current_user: dict = Depends(get_current_user)):
     user_id    = current_user["user_id"]
     session_id = request.session_id if request else "default"
-    key        = f"{user_id}:{session_id}"
+    key        = _agent_key(user_id, session_id)
     with _session_lock:
         if key in _session_agents:
             _session_agents[key].reset_conversation()
@@ -1483,12 +1575,21 @@ def get_conv_messages(session_id: str, current_user: dict = Depends(get_current_
 def delete_conv(session_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a conversation and all its messages."""
     user_id = current_user["user_id"]
-    # Also clear the in-memory agent if it exists
+    # Also clear the in-memory agent if it exists.
+    #
+    # /chat caches agents under "{user_id}:{session_id}" (_agent_key), and this
+    # looked up the bare session_id — so the keys never matched, the branch was
+    # dead, and deleting a conversation removed its database rows while the
+    # transcript stayed in memory and kept being replayed into the model on the
+    # next turn. Using the same key builder as /chat is what stops the two
+    # drifting apart again; it also scopes the eviction to the caller, so one
+    # user's delete cannot evict another user's identically-named session.
+    key = _agent_key(user_id, session_id)
     with _session_lock:
-        if session_id in _session_agents:
-            _session_agents.pop(session_id, None)
-            if session_id in _session_order:
-                _session_order.remove(session_id)
+        if key in _session_agents:
+            _session_agents.pop(key, None)
+            if key in _session_order:
+                _session_order.remove(key)
     if _HISTORY_ENABLED:
         deleted = _delete_conversation(session_id, user_id)
         if not deleted:
@@ -1711,7 +1812,11 @@ def test_sap_connection(admin: dict = Depends(require_admin)):
 
 
 @app.get("/config/mcp-servers")
-def list_mcp_servers(current_user: dict = Depends(get_current_user)):
+def list_mcp_servers(admin: dict = Depends(require_admin)):
+    """Admin only, to match POST/DELETE on the same resource and GET /config.
+
+    The list carries the names, URLs and transports of internal MCP servers —
+    infrastructure detail a read_only account has no reason to see."""
     mcp_cfg = config.mcp
     servers = []
     if mcp_cfg.get("builtin_enabled", True):
@@ -1749,13 +1854,75 @@ def remove_mcp_server(server_name: str, admin: dict = Depends(require_admin)):
     return {"status": "ok", "message": f"MCP server '{server_name}' removed"}
 
 
+def assert_safe_outbound_url(raw_url: str) -> None:
+    """Raise HTTPException(400) unless `raw_url` is safe for the server to fetch.
+
+    Any endpoint that makes the server issue a request to a caller-supplied
+    URL is a server-side request forgery gadget unless the target is checked.
+    /config/test-mcp was one: it reported "HTTP 200" for a reachable internal
+    service and "Connection failed" for a closed port, which turns it into a
+    working internal port scanner — and it was open to every authenticated
+    caller, including read_only.
+
+    Two rules, both necessary:
+      * scheme must be http/https — `file://`, `gopher://` and friends reach
+        things an HTTP client was never meant to reach;
+      * every address the hostname resolves to must be publicly routable, so
+        a name that resolves to 127.0.0.1, an RFC1918 range, or the cloud
+        metadata address at 169.254.169.254 is refused rather than probed.
+
+    Checking every resolved address, not just the first, is what stops a
+    dual-A-record host from slipping an internal address past the guard.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(raw_url or "")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            400,
+            f"Unsupported URL scheme {parsed.scheme or '(none)'!r}. "
+            "Use http:// or https://.",
+        )
+    host = parsed.hostname
+    if not host:
+        raise HTTPException(400, "The URL has no host.")
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise HTTPException(400, f"Host {host!r} could not be resolved.")
+
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if (address.is_private or address.is_loopback or address.is_link_local
+                or address.is_reserved or address.is_multicast
+                or address.is_unspecified):
+            raise HTTPException(
+                400,
+                f"Refusing to probe {host!r}: it resolves to the internal "
+                f"address {address}. Only publicly routable hosts may be tested.",
+            )
+
+
 @app.post("/config/test-mcp")
-def test_mcp_server(server: MCPServer, current_user: dict = Depends(get_current_user)):
+def test_mcp_server(server: MCPServer, admin: dict = Depends(require_admin)):
+    """Probe a custom MCP server's URL. Admin only — see assert_safe_outbound_url.
+
+    Its POST/DELETE siblings on /config/mcp-servers already required admin;
+    this one did not, which let any authenticated account drive outbound
+    requests from the server.
+    """
     if server.transport == "stdio":
         return {"success": True, "message": "stdio transport — always available locally"}
+    assert_safe_outbound_url(server.url)
     try:
         import requests as _r
-        r = _r.head(server.url, timeout=5, allow_redirects=True)
+        # Redirects are not followed: a 302 to an internal address would walk
+        # straight past the check above.
+        r = _r.head(server.url, timeout=5, allow_redirects=False)
         return {"success": r.status_code < 500, "message": f"HTTP {r.status_code}", "url": server.url}
     except Exception:
         return {"success": False, "message": "Connection failed", "url": server.url}

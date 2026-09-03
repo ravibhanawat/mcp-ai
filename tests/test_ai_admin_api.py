@@ -27,6 +27,20 @@ def client_as(roles):
     return TestClient(app)
 
 
+def tearDownModule():
+    """Drop the overrides client_as() installed on the shared api.server.app.
+
+    dependency_overrides lives on the one process-global app object, so leaving
+    it populated does not stop at this module's last test: every later module
+    that exercises the same app then runs with get_current_user pinned to a
+    fake "tester" admin. tests/test_e2e_security.py is next alphabetically, and
+    inherited exactly that — its auth, RBAC, tenant-isolation and audit
+    assertions failed against a caller they never chose.
+    """
+    from api import server as server_module
+    server_module.app.dependency_overrides.clear()
+
+
 PROVIDER_ROW = {
     "id": "p1", "tenant_id": "default", "name": "Local", "provider_type": "OLLAMA",
     "base_url": "http://localhost:11434", "organization_id": None,
@@ -342,7 +356,13 @@ class TestPolicyAndRouting(unittest.TestCase):
 
     def test_setting_a_default_model_writes_the_policy_row(self):
         captured = {}
-        with patch("api.routes_ai_admin._upsert_policy_row",
+        # put_policy now refuses a default that points at a model which cannot
+        # serve it, so the referenced model has to exist, be active, and have
+        # the matching purpose.
+        with patch("api.routes_ai_admin._get_model_row",
+                   return_value={"id": "m1", "model_name": "Chat",
+                                 "is_active": True, "purpose": "CHAT"}), \
+             patch("api.routes_ai_admin._upsert_policy_row",
                    side_effect=lambda v: captured.update(v)), \
              patch("api.routes_ai_admin._invalidate"), \
              patch("api.routes_ai_admin._policy_out", return_value={}):

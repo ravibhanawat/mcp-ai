@@ -15,9 +15,10 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ai.credentials import credential_display, delete_credential, is_unchanged, store_credential
+from ai.errors import CredentialUnavailable
 from ai.providers.registry import build_provider, supported_provider_types
 from ai.store import get_store, provider_from_row, write_snapshot
 from ai.types import ProviderType
@@ -91,6 +92,13 @@ def derive_egress_class(provider_type: str, base_url: str | None) -> str:
     treated as external and its payloads are redacted unless an administrator
     explicitly permits SAP data. Derived rather than asked so a mistyped
     dropdown cannot downgrade the protection.
+
+    Link-local is deliberately NOT part of "inside the estate", even though
+    Python's `is_private` says it is. 169.254.169.254 is the cloud instance
+    metadata service — the single most valuable exfiltration target on a cloud
+    host — and classifying it `local` told `_should_redact` that SAP payloads
+    could be sent there unredacted. Reserved and multicast ranges are excluded
+    for the same reason: unusual is not trusted.
     """
     if not base_url:
         return "local" if provider_type == ProviderType.OLLAMA.value else "external"
@@ -99,6 +107,8 @@ def derive_egress_class(provider_type: str, base_url: str | None) -> str:
         return "local"
     try:
         address = ipaddress.ip_address(host)
+        if address.is_link_local or address.is_reserved or address.is_multicast:
+            return "external"
         if address.is_loopback or address.is_private:
             return "local"
     except ValueError:
@@ -108,12 +118,35 @@ def derive_egress_class(provider_type: str, base_url: str | None) -> str:
 
 # ── schemas ───────────────────────────────────────────────────────────────────
 
+def _validated_base_url(value: str | None) -> str | None:
+    """Accept only an http(s) URL with a host — or the empty default.
+
+    base_url had no validation at all, so `javascript:alert(1)`, `file:///etc/
+    passwd`, `hello world` and `""` were all stored as *active* providers and
+    only failed much later, at dispatch, a long way from the mistake. Ollama
+    rows legitimately carry no base_url, so empty stays valid; anything
+    non-empty must be a real endpoint.
+
+    Column widths match ai/schema.py, so an over-long value is a 422 here
+    rather than an unhandled 500 from the database driver.
+    """
+    if value is None or value == "":
+        return value
+    parsed = urlparse(value)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(
+            "base_url must be an http:// or https:// URL with a host, "
+            f"or empty. Got {value!r}."
+        )
+    return value
+
+
 class ProviderIn(BaseModel):
-    name: str
-    provider_type: str
+    name: str = Field(..., min_length=1, max_length=100)
+    provider_type: str = Field(..., max_length=20)
     base_url: str = ""
-    organization_id: str | None = None
-    deployment_name: str | None = None
+    organization_id: str | None = Field(default=None, max_length=100)
+    deployment_name: str | None = Field(default=None, max_length=100)
     timeout_seconds: int = Field(default=30, ge=1, le=600)
     max_retries: int = Field(default=2, ge=0, le=10)
     #: Raising this lets SAP records reach an external provider unredacted, so it
@@ -133,20 +166,24 @@ class ProviderIn(BaseModel):
     is_active: bool = True
     api_key: str | None = None
 
+    _check_base_url = field_validator("base_url")(_validated_base_url)
+
 
 class ProviderUpdate(BaseModel):
     """Schema for PATCH updates; all fields are optional."""
-    name: str | None = None
-    provider_type: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    provider_type: str | None = Field(default=None, max_length=20)
     base_url: str | None = None
-    organization_id: str | None = None
-    deployment_name: str | None = None
+    organization_id: str | None = Field(default=None, max_length=100)
+    deployment_name: str | None = Field(default=None, max_length=100)
     timeout_seconds: int | None = Field(default=None, ge=1, le=600)
     max_retries: int | None = Field(default=None, ge=0, le=10)
     sap_data_permitted: bool | None = None
     egress_class_override: Literal["local", "external"] | None = None
     is_active: bool | None = None
     api_key: str | None = None
+
+    _check_base_url = field_validator("base_url")(_validated_base_url)
 
 
 class ProviderOut(BaseModel):
@@ -205,8 +242,19 @@ def create_provider(body: ProviderIn, admin: dict = Depends(require_admin)):
         "egress_class": egress, "sap_data_permitted": body.sap_data_permitted,
         "is_active": body.is_active, "updated_by": admin.get("user_id"),
     })
+    # The row and its credential are two writes to two stores, so a failure
+    # between them has to be undone by hand. Without this, a create that 500'd
+    # on an unset AI_CONFIG_KEY still left an *active*, credential-less
+    # provider in the routing pool — and every retry added another.
     if body.api_key and not is_unchanged(body.api_key):
-        store_credential(provider_id, DEFAULT_TENANT, body.api_key)
+        try:
+            store_credential(provider_id, DEFAULT_TENANT, body.api_key)
+        except CredentialUnavailable as exc:
+            _delete_provider_row(provider_id, DEFAULT_TENANT)
+            raise HTTPException(503, f"Provider not created: {exc}")
+        except Exception:
+            _delete_provider_row(provider_id, DEFAULT_TENANT)
+            raise
     if body.sap_data_permitted:
         _audit_egress_change(admin, provider_id, body.name, True)
     _invalidate()
@@ -267,6 +315,10 @@ def update_provider(provider_id: str, body: ProviderUpdate, admin: dict = Depend
 
 @router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_provider(provider_id: str, admin: dict = Depends(require_admin)):
+    # 204 for an id that never existed told an admin who deleted the wrong
+    # thing, or a script holding a stale id, that the delete had worked.
+    if not _get_provider_row(provider_id, DEFAULT_TENANT):
+        raise HTTPException(404, "Provider not found.")
     delete_credential(provider_id, DEFAULT_TENANT)
     _delete_provider_row(provider_id, DEFAULT_TENANT)
     _invalidate()
@@ -655,8 +707,41 @@ def get_policy(admin: dict = Depends(require_admin)) -> dict:
     return _policy_out()
 
 
+def _assert_usable_default(model_id: str | None, purpose: Purpose, field: str) -> None:
+    """Refuse a default that points at a model which cannot serve it.
+
+    Nothing checked these ids, so an id belonging to no model at all saved
+    with a 200 and took chat down for every user — reported as a 503 blaming
+    the configuration *database*, which sent the operator looking in entirely
+    the wrong place. Clearing a default (None) stays valid.
+    """
+    if model_id is None:
+        return
+    row = _get_model_row(model_id, DEFAULT_TENANT)
+    if row is None:
+        raise HTTPException(400, f"{field}: no model with id {model_id!r} exists.")
+    if not row["is_active"]:
+        raise HTTPException(
+            400,
+            f"{field}: model {row.get('model_name', model_id)!r} is not active. "
+            "Activate it first — activation is what proves it can serve requests.",
+        )
+    if row["purpose"] != purpose.value:
+        raise HTTPException(
+            400,
+            f"{field}: model {row.get('model_name', model_id)!r} has purpose "
+            f"{row['purpose']}, not {purpose.value}.",
+        )
+
+
 @router.put("/policy")
 def put_policy(body: PolicyIn, admin: dict = Depends(require_admin)) -> dict:
+    _assert_usable_default(body.default_chat_model_id, Purpose.CHAT,
+                           "default_chat_model_id")
+    _assert_usable_default(body.default_embedding_model_id, Purpose.EMBEDDING,
+                           "default_embedding_model_id")
+    _assert_usable_default(body.default_reranker_model_id, Purpose.RERANKING,
+                           "default_reranker_model_id")
     _upsert_policy_row({"tenant_id": DEFAULT_TENANT, **body.model_dump()})
     _invalidate()
     return _policy_out()

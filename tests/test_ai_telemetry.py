@@ -52,11 +52,30 @@ class TestUsageLogging(unittest.TestCase):
 
 class TestHealthProbe(unittest.TestCase):
 
-    def _resolved(self, url):
+    def _resolved(self, url, model_identifier="configured-test-model"):
+        """A coherent provider/model pair.
+
+        The identifier defaults to the one FakeProviderServer actually offers:
+        probe() now checks that the provider lists the configured model, not
+        just that the provider answers, so a fixture whose model the fake
+        server does not offer would be reported unreachable — correctly, but
+        for a reason these tests are not about.
+        """
         store = InMemoryConfigStore()
         store.add_provider(make_provider_row(id="p1", base_url=url, timeout_seconds=1))
-        store.add_model(make_model_row(id="m1", provider_id="p1"), {Capability.CHAT})
+        store.add_model(
+            make_model_row(id="m1", provider_id="p1",
+                           model_identifier=model_identifier),
+            {Capability.CHAT},
+        )
         return store.resolved("m1", "default")
+
+    def test_a_model_the_provider_does_not_offer_is_not_healthy(self):
+        """The regression behind the "healthy" badge on a missing model."""
+        with FakeProviderServer(mode="ok") as s:
+            result = probe(self._resolved(s.base_url, "not-installed"), api_key=None)
+            self.assertEqual("unreachable", result.status)
+            self.assertIn("not-installed", result.error)
 
     def test_reachable_provider_reports_healthy_with_latency(self):
         with FakeProviderServer(mode="ok") as s:

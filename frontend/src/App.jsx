@@ -1509,19 +1509,24 @@ function SettingsModal({ onClose, currentUser }) {
     setTimeout(() => setCreateStatus(null), 4000)
   }
 
-  const handleGetSetup = async (uid) => {
+  // GET shows the config without touching the key; POST issues a new one and
+  // revokes the previous. Reading used to rotate, so simply viewing a user's
+  // setup silently broke the key they were already using.
+  const handleGetSetup = async (uid, rotate = false) => {
     setSetupLoading(uid)
     try {
-      const d = await (await apiFetch(`/auth/users/${uid}/mcp-setup`)).json()
+      const d = await (await apiFetch(`/auth/users/${uid}/mcp-setup`,
+        rotate ? { method: 'POST' } : undefined)).json()
       setSetupData(d)
     } catch { /* ignore */ }
     finally { setSetupLoading(null) }
   }
 
-  const handleGetMySetup = async () => {
+  const handleGetMySetup = async (rotate = false) => {
     setMySetupLoading(true)
     try {
-      const d = await (await apiFetch('/mcp/my-setup')).json()
+      const d = await (await apiFetch('/mcp/my-setup',
+        rotate ? { method: 'POST' } : undefined)).json()
       setMySetup(d)
     } catch { /* ignore */ }
     finally { setMySetupLoading(false) }
@@ -1851,9 +1856,20 @@ function SettingsModal({ onClose, currentUser }) {
                     a.download = 'claude_desktop_config.json'; a.click()
                   }}>Download JSON</button>
                 </div>
-                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--warning, #f0a)' }}>
-                  This key is shown once. Clicking ⚙ Setup again will regenerate it and invalidate this one.
-                </div>
+                {setupData.mcp_key ? (
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--warning, #f0a)' }}>
+                    This key is shown once. Copy it now — reopening this panel will not show it again.
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{setupData.message}</span>
+                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: '3px 8px' }}
+                      disabled={setupLoading === setupData.user_id}
+                      onClick={() => handleGetSetup(setupData.user_id, true)}>
+                      Issue New Key
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -1867,8 +1883,8 @@ function SettingsModal({ onClose, currentUser }) {
                 no database credentials, no local Python setup required.
               </div>
               {!mySetup ? (
-                <button className="btn btn-primary" onClick={handleGetMySetup} disabled={mySetupLoading} style={{ alignSelf: 'flex-start' }}>
-                  {mySetupLoading ? 'Generating…' : 'Generate My Setup Config'}
+                <button className="btn btn-primary" onClick={() => handleGetMySetup(false)} disabled={mySetupLoading} style={{ alignSelf: 'flex-start' }}>
+                  {mySetupLoading ? 'Loading…' : 'Show My Setup Config'}
                 </button>
               ) : (() => {
                 const cfgText = JSON.stringify(mySetup.claude_desktop_config, null, 2)
@@ -1884,13 +1900,19 @@ function SettingsModal({ onClose, currentUser }) {
                         const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
                         a.download = 'claude_desktop_config.json'; a.click()
                       }}>Download JSON</button>
-                      <button className="btn btn-secondary" style={{ fontSize: 12 }} onClick={() => { setMySetup(null) }}>Regenerate</button>
+                      <button className="btn btn-secondary" style={{ fontSize: 12 }}
+                        disabled={mySetupLoading}
+                        onClick={() => handleGetMySetup(true)}>
+                        {mySetupLoading ? 'Working…' : 'Issue New Key'}
+                      </button>
                     </div>
                     <ol style={{ fontSize: 12, color: 'var(--text-muted)', paddingLeft: 18, margin: 0, lineHeight: 2 }}>
                       {(mySetup.instructions || []).map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
-                    <div style={{ fontSize: 11, color: 'var(--warning, #f90)', marginTop: 4 }}>
-                      This key is shown once. Click Regenerate to get a new one (invalidates the old key).
+                    <div style={{ fontSize: 11, color: mySetup.mcp_key ? 'var(--warning, #f90)' : 'var(--text-muted)', marginTop: 4 }}>
+                      {mySetup.mcp_key
+                        ? 'This key is shown once. Copy it now — reopening this tab will not show it again.'
+                        : `${mySetup.message} Issuing a new key invalidates the one Claude Desktop is using.`}
                     </div>
                   </div>
                 )

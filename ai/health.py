@@ -27,9 +27,40 @@ def _query_one(sql: str, params: tuple) -> dict | None:
 
 
 def probe(resolved: ResolvedModel, api_key: str | None) -> HealthResult:
-    """Check whether the model's provider answers. Never raises."""
+    """Check that this model can actually serve a request. Never raises.
+
+    A reachable provider is necessary but not sufficient. Probing only the
+    provider reported a model the provider no longer offers as "healthy" —
+    the admin health page, `POST /models/{id}/test` and `/health`'s
+    `llm_connected` all showed green while every chat failed with
+    ProviderUnavailable and fell through to the external fallback provider,
+    unannounced.
+
+    So the identifier is checked too, with the same rule
+    `ai.validation.validate()` already applies at activation: a provider that
+    cannot enumerate its models proves nothing, and absence of evidence is not
+    evidence of absence — only a model missing from a non-empty list is a
+    failure.
+    """
     try:
-        return build_provider(resolved.provider, api_key).health_check()
+        provider = build_provider(resolved.provider, api_key)
+        result = provider.health_check()
+        if result.status != "healthy":
+            return result
+
+        try:
+            offered = provider.list_models()
+        except Exception:
+            offered = []          # cannot enumerate — nothing to contradict
+        identifier = resolved.model.model_identifier
+        if offered and identifier not in offered:
+            return HealthResult(
+                "unreachable", result.latency_ms,
+                f"{resolved.provider.name} is reachable, but does not offer "
+                f"model {identifier!r}. Configured models: "
+                f"{', '.join(sorted(offered)[:10])}",
+            )
+        return result
     except Exception as exc:
         return HealthResult("unreachable", 0, str(exc)[:500])
 

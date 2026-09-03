@@ -22,6 +22,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,10 +46,29 @@ from core import security as core_security  # noqa: E402
 
 
 # ── Fake agent: replaces the LLM so tests are hermetic and instant ────────────
+class _FakeManager:
+    """Stand-in for ai.manager.AIProviderManager.
+
+    api/server.py resolves a model through `agent.manager.resolve_only()` before
+    it dispatches a chat, and answers 503 if that raises. A double without this
+    attribute makes every chat request in this file 503 on an AttributeError,
+    which is indistinguishable from a config-store outage. Only
+    `.resolved.model.id` is read off the result.
+    """
+
+    def resolve_only(self, tenant_id=None, purpose=None, requested_model_id=None):
+        return SimpleNamespace(
+            resolved=SimpleNamespace(
+                model=SimpleNamespace(id="m-test", model_identifier="llama3.2")
+            )
+        )
+
+
 class _FakeAgent:
     """Stand-in for SAPAgent. Records what RBAC allow-list it was handed."""
 
     model = "llama3.2"
+    manager = _FakeManager()
     last_allowed_tools = None
     next_tool = None          # tool name the "LLM" decides to call
     next_result = None
@@ -595,10 +615,11 @@ class TestPromptInjection(_Base):
 
     def test_cloud_fallback_strips_sap_payloads(self):
         """Data residency: SAP tool data must not be transmitted to a cloud LLM."""
-        from agent.sap_agent import SAPAgent
+        # Moved off SAPAgent in this build: ai.manager must apply it to any
+        # external provider, whichever agent made the call.
         msgs = [{"role": "user",
                  "content": "SAP tool 'get_payslip' returned:\n{\"net_pay\": 90000, \"iban\": \"DE89370400440532013000\"}"}]
-        out = SAPAgent._sanitize_for_cloud(msgs)
+        out = core_security.sanitize_sap_payload(msgs)
         blob = json.dumps(out)
         self.assertNotIn("90000", blob)
         self.assertNotIn("DE89370400440532013000", blob)

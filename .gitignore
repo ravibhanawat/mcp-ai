@@ -20,6 +20,11 @@ mcp_keys.json
 *.env
 .env
 .env.*
+# ...but the templates must ship: README's Quick Start tells you to copy them,
+# and `.env.*` above was silently excluding .env.example from the repository.
+!.env.example
+!users.json.example
+!config.json.example
 
 # Logs
 logs/

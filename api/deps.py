@@ -52,11 +52,34 @@ def get_current_user(
         )
     try:
         payload = decode_token(credentials.credentials)
-        return {"user_id": payload["sub"], "roles": payload.get("roles", [])}
     except _jwt.ExpiredSignatureError:
         raise HTTPException(401, "Access token expired. Use /auth/refresh to renew.")
     except _jwt.InvalidTokenError:
         raise HTTPException(401, "Invalid token.")
+
+    user_id = payload["sub"]
+
+    # A signature only proves the token was minted by us, not that the account
+    # still exists. PATCH /auth/users/{id}/deactivate revoked the MCP key and
+    # blocked re-login, but the access token already in the user's hands kept
+    # working until it expired — so a revoked or compromised account retained
+    # full API access for up to JWT_EXPIRE_HOURS after it was closed. The
+    # account is re-checked on every request instead.
+    try:
+        from auth import users as user_store
+        account = user_store.get_user(user_id)
+    except Exception as exc:
+        # Fail closed, but say which failure it is: an unreadable user store is
+        # an operational problem, not a bad credential, and answering 401 would
+        # send everyone to the login screen to no effect.
+        raise HTTPException(503, "The user directory is temporarily unavailable.") from exc
+
+    if account is None:
+        raise HTTPException(401, "Account no longer exists.")
+    if not account.get("active", True):
+        raise HTTPException(401, "Account is deactivated.")
+
+    return {"user_id": user_id, "roles": payload.get("roles", [])}
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
