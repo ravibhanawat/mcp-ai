@@ -139,6 +139,21 @@ class TestOllamaEmbedHealthAndList(unittest.TestCase):
     def test_list_models_returns_empty_when_unreachable(self):
         self.assertEqual([], OllamaProvider(provider_at("http://127.0.0.1:1")).list_models())
 
+    def test_list_models_exposes_bare_name_for_latest_tag(self):
+        """In Ollama a bare reference means ':latest', so a model registered as
+        'kutty:latest' must also be matchable as 'kutty' — otherwise health.probe()
+        and validation both declare a perfectly working model unreachable."""
+        with FakeProviderServer(mode="ok", model_name="kutty:latest") as s:
+            offered = OllamaProvider(provider_at(s.base_url)).list_models()
+        self.assertIn("kutty:latest", offered)
+        self.assertIn("kutty", offered)
+
+    def test_list_models_does_not_invent_bare_name_for_other_tags(self):
+        """Only ':latest' is implicit. 'gemma4:26b' must NOT become 'gemma4'."""
+        with FakeProviderServer(mode="ok", model_name="gemma4:26b") as s:
+            offered = OllamaProvider(provider_at(s.base_url)).list_models()
+        self.assertEqual(["gemma4:26b"], offered)
+
 
 def openai_provider_at(url, ptype=ProviderType.OPENAI, **over):
     base = dict(
