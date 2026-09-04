@@ -3,6 +3,7 @@ mock, so socket handling, timeouts and error mapping are all exercised for real.
 import asyncio
 import os
 import unittest
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 from ai.errors import AuthFailed, ModelTimeout, ProviderUnavailable, RateLimited
@@ -56,6 +57,22 @@ class TestOllamaChat(unittest.TestCase):
             options = s.requests[0]["options"]
             self.assertAlmostEqual(0.2, options["temperature"])
             self.assertEqual(256, options["num_predict"])
+
+    def test_sends_configured_context_window_as_num_ctx(self):
+        """Ollama silently truncates at its own 4096 default otherwise.
+
+        The report planner sends a multi-thousand-token prompt; without num_ctx
+        it arrived half-cut and the model answered with unrelated prose.
+        """
+        with FakeProviderServer(mode="ok") as s:
+            OllamaProvider(provider_at(s.base_url)).chat(a_model(), MESSAGES)
+            self.assertEqual(4096, s.requests[0]["options"]["num_ctx"])
+
+    def test_num_ctx_tracks_the_model_row(self):
+        with FakeProviderServer(mode="ok") as s:
+            model = replace(a_model(), context_window=32768)
+            OllamaProvider(provider_at(s.base_url)).chat(model, MESSAGES)
+            self.assertEqual(32768, s.requests[0]["options"]["num_ctx"])
 
     def test_unreachable_maps_to_provider_unavailable(self):
         provider = provider_at("http://127.0.0.1:1")   # nothing listens on port 1
@@ -138,6 +155,21 @@ class TestOllamaEmbedHealthAndList(unittest.TestCase):
 
     def test_list_models_returns_empty_when_unreachable(self):
         self.assertEqual([], OllamaProvider(provider_at("http://127.0.0.1:1")).list_models())
+
+    def test_list_models_exposes_bare_name_for_latest_tag(self):
+        """In Ollama a bare reference means ':latest', so a model registered as
+        'kutty:latest' must also be matchable as 'kutty' — otherwise health.probe()
+        and validation both declare a perfectly working model unreachable."""
+        with FakeProviderServer(mode="ok", model_name="kutty:latest") as s:
+            offered = OllamaProvider(provider_at(s.base_url)).list_models()
+        self.assertIn("kutty:latest", offered)
+        self.assertIn("kutty", offered)
+
+    def test_list_models_does_not_invent_bare_name_for_other_tags(self):
+        """Only ':latest' is implicit. 'gemma4:26b' must NOT become 'gemma4'."""
+        with FakeProviderServer(mode="ok", model_name="gemma4:26b") as s:
+            offered = OllamaProvider(provider_at(s.base_url)).list_models()
+        self.assertEqual(["gemma4:26b"], offered)
 
 
 def openai_provider_at(url, ptype=ProviderType.OPENAI, **over):

@@ -1,7 +1,6 @@
 import { parseSSE } from './sse-parser.js'
 import useChatStore from '../stores/chat-store.js'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from './api.js'
 
 /**
  * Sends a message to /chat/stream, dispatches typed SSE events to the

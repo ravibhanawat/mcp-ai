@@ -59,6 +59,14 @@ class OllamaProvider(AIProvider):
             "options": {
                 "temperature": model.temperature if temperature is None else temperature,
                 "num_predict": model.max_tokens if max_tokens is None else max_tokens,
+                # Ollama defaults num_ctx to 4096 regardless of what the model
+                # supports, and silently truncates anything longer — no error,
+                # just a mangled prompt and degenerate output. The report
+                # planner sends ~7.7k tokens of tool registry, so it was being
+                # cut in half and the model answered with matplotlib snippets
+                # instead of plan JSON. Send the context window the model is
+                # actually configured with.
+                "num_ctx": model.context_window,
             },
         }
 
@@ -152,9 +160,25 @@ class OllamaProvider(AIProvider):
             )
 
     def list_models(self) -> list[str]:
+        """Model identifiers this Ollama offers.
+
+        `/api/tags` always reports a fully-qualified `name:tag`, but Ollama
+        resolves a bare reference to `:latest`, so `kutty` and `kutty:latest`
+        name the same model. Callers compare a configured identifier against
+        this list with `in` (`ai.health.probe`, `ai.validation`), so a model
+        configured bare and registered as `:latest` was reported unreachable
+        while it served requests fine. Expose both spellings for `:latest`;
+        every other tag is explicit and gets no alias.
+        """
         try:
             resp = requests.get(self._url("/api/tags"), timeout=self.provider.timeout_seconds)
             resp.raise_for_status()
-            return [m["name"] for m in resp.json().get("models", [])]
+            identifiers = []
+            for m in resp.json().get("models", []):
+                name = m["name"]
+                identifiers.append(name)
+                if name.endswith(":latest"):
+                    identifiers.append(name[: -len(":latest")])
+            return identifiers
         except Exception:
             return []

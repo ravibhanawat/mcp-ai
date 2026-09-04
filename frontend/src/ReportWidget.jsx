@@ -49,6 +49,19 @@ function heatColor(value, config = {}) {
   return low
 }
 
+// Currency-scale values (a customer's order values run into crores) are
+// unreadable at full precision in a narrow bar row, so abbreviate above 10k
+// and keep small counts — headcount, order counts, days — exactly as they are.
+function formatValue(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return String(value)
+  const abs = Math.abs(n)
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`
+  if (abs >= 1e4) return `${(n / 1e3).toFixed(1)}K`
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
 // ─── Pie Chart ────────────────────────────────────────────────────────────────
 
 function PieChart({ data = [], config = {} }) {
@@ -109,7 +122,9 @@ function PieChart({ data = [], config = {} }) {
           >
             <span className="rw-pie-dot" style={{ background: s.color }} />
             <span className="rw-pie-label">{s.label}</span>
-            <span className="rw-pie-val">{s.value} {config.unit || ''}</span>
+            <span className="rw-pie-val" title={`${s.value} ${config.unit || ''}`.trim()}>
+              {formatValue(s.value)} {config.unit || ''}
+            </span>
             <span className="rw-pie-pct">({s.pct}%)</span>
           </li>
         ))}
@@ -138,7 +153,9 @@ function BarChart({ data = [], config = {} }) {
                 style={{ width: `${pct}%`, background: barColor, transition: 'width 0.5s ease' }}
               />
             </div>
-            <div className="rw-bar-val">{d.value} <span className="rw-bar-unit">{config.unit || ''}</span></div>
+            <div className="rw-bar-val" title={`${d.value} ${config.unit || ''}`.trim()}>
+              {formatValue(d.value)} <span className="rw-bar-unit">{config.unit || ''}</span>
+            </div>
           </div>
         )
       })}

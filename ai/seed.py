@@ -178,14 +178,23 @@ def seed_from_existing_config(tenant_id: str = "default") -> dict:
         ollama_provider_id = _insert_provider(
             conn=conn, id=_new_id(), tenant_id=tenant_id, name="Local Ollama",
             provider_type=ProviderType.OLLAMA.value, base_url=ollama_url,
-            timeout_seconds=30, max_retries=2, egress_class="local",
+            # 30s was tuned for a 3B model. A local chat model in the 20B+ class
+            # needs far longer, and the first request after Ollama unloads it
+            # pays the whole model-load cost before emitting a token. A local
+            # provider has no per-request billing, so a generous ceiling costs
+            # nothing and a tight one turns a slow answer into no answer.
+            timeout_seconds=300, max_retries=2, egress_class="local",
             sap_data_permitted=False, is_active=True,
         )
         created_providers += 1
         chat_model_id = _insert_model(
             conn=conn, id=_new_id(), tenant_id=tenant_id, provider_id=ollama_provider_id,
             model_name="Local Chat Model", model_identifier=ollama_model,
-            purpose=Purpose.CHAT.value, context_window=8192, max_tokens=1024,
+            # The chat system prompt carries the full 46-tool registry (~7.7k
+            # tokens). At 8192 that left almost no room for the conversation,
+            # and the provider passes this straight through as Ollama's num_ctx
+            # (ai/providers/ollama.py), overriding the Modelfile's own setting.
+            purpose=Purpose.CHAT.value, context_window=16384, max_tokens=1024,
             temperature=0.10, prompt_profile="registry_tool_json", is_active=True,
         )
         _register(chat_model_id, tenant_id, Purpose.CHAT, conn=conn)
