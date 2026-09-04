@@ -917,15 +917,22 @@ async def chat(
 
     # ── Report / visualization intent ─────────────────────────────────────────
     from agent.report_agent import (is_report_query, generate as gen_report,
-                                    reply_text as report_reply, is_access_denied)
+                                    reply_text as report_reply, is_access_denied,
+                                    is_explicit_chart_request, clarify_text)
+    chart_clarification = None
     if is_report_query(body.message):
         try:
             # The report agent reaches SAP data directly, so it gets the same
             # allow-list the tool path gets. Without this, asking for a "chart"
             # bypasses RBAC entirely.
+            #
+            # The history resolves follow-ups ("i need this bar chart") whose
+            # subject is only in the previous turn. RBAC is applied to whatever
+            # it resolves to, so this widens reference, not access.
             report_payload = await _aio.to_thread(
                 gen_report, body.message,
                 get_allowed_tools(user_roles) if _AUTH_ENABLED else None,
+                list(agent.conversation_history),
             )
             if is_access_denied(report_payload):
                 raise HTTPException(
@@ -942,6 +949,17 @@ async def chat(
             logger.exception("Report agent failed; falling back to normal chat")
             report_payload = None
 
+        # An unambiguous chart request that produced no chart must not fall
+        # through to freeform chat: the model answers "give me a bar chart" by
+        # writing matplotlib, which this product cannot run and the user did
+        # not ask for. Ask which data to chart instead. Loose report words
+        # ("compare", "share of") are excluded, so ordinary questions still
+        # reach the agent.
+        if not report_payload and is_explicit_chart_request(body.message):
+            chart_clarification = clarify_text(body.message)
+            response_text = chart_clarification
+            tool_called   = "report_agent"
+
     from core.authorization import execution_context
 
     def _run_agent():
@@ -956,7 +974,8 @@ async def chat(
             )
 
     try:
-        if not report_payload and not abap_check_payload and not abap_code_payload:
+        if (not report_payload and not chart_clarification
+                and not abap_check_payload and not abap_code_payload):
             response_text, tool_called, tool_result = await _aio.to_thread(_run_agent)
 
         if tool_called in ("action_plan", "autonomous_agent", "auto_research", "report_agent", "analyze_abap_syntax", "generate_abap_code") and isinstance(tool_result, dict):
@@ -1231,15 +1250,22 @@ async def chat_stream(
 
             # ── Report / visualization intent ─────────────────────────────────
             from agent.report_agent import (is_report_query, generate as gen_report,
-                                            reply_text as report_reply, is_access_denied)
+                                            reply_text as report_reply, is_access_denied,
+                                            is_explicit_chart_request, clarify_text)
             if is_report_query(body.message):
                 status_steps.append("Generating report and charts...")
                 yield _sse("status", {"step": "Generating report and charts...", "phase": "calling_tool", "tool": "report_agent"})
                 try:
                     # Same allow-list the tool path uses — a "chart" request must
                     # not reach data the caller's role does not permit.
+                    #
+                    # The history resolves follow-ups ("i need this bar chart")
+                    # whose subject is only in the previous turn. RBAC is applied
+                    # to whatever it resolves to, so this widens reference, not
+                    # access.
                     report_payload = await asyncio.to_thread(
-                        gen_report, body.message, allowed_tools)
+                        gen_report, body.message, allowed_tools,
+                        list(agent.conversation_history))
                     if is_access_denied(report_payload):
                         yield _sse("error", {
                             "message": "Access denied: your role does not permit "
@@ -1264,6 +1290,27 @@ async def chat_stream(
                 except Exception:
                     _logger.exception("Report agent failed; falling through to main agent")
                     report_payload = None
+
+                # An unambiguous chart request that produced no chart must not
+                # fall through to the streaming agent: it answers "give me a bar
+                # chart" by writing matplotlib, which this product cannot run
+                # and the user did not ask for. Ask which data to chart instead.
+                # Loose report words ("compare", "share of") are excluded, so
+                # ordinary questions still reach the agent.
+                if not report_payload and is_explicit_chart_request(body.message):
+                    response_text = clarify_text(body.message)
+                    tool_called   = "report_agent"
+                    full_text     = response_text
+                    yield _sse("answer", {"delta": response_text})
+                    yield _sse("done", {
+                        "tool_called": tool_called, "tool_result": None,
+                        "sap_source": None, "report": None,
+                        "abap_check": None, "abap_code": None,
+                        "show_visualization": _show_viz,
+                        "duration_ms": int((time.monotonic() - t_start) * 1000),
+                        "model": resolved_model_id,
+                    })
+                    return
 
             # ── Main agent streaming path ─────────────────────────────────────
             async for event_str in agent.chat_stream(

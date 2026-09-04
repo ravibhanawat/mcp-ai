@@ -108,10 +108,15 @@ class TestEgress(ManagerTestCase):
         self.assertTrue(logged.call_args[0][0].redaction_applied)
 
     def test_report_agent_shaped_system_message_is_redacted_externally(self):
-        """agent.report_agent._format embeds json.dumps(collected_data) into
-        the *system* message with no 'SAP tool ... returned:' prefix — the
-        exact shape core/security.py's old prefix-only match could never see
-        (Critical 2). This must not reach an external, unpermitted provider."""
+        """A system message can embed json.dumps(sap_results) with no
+        'SAP tool ... returned:' prefix — the exact shape core/security.py's
+        old prefix-only match could never see (Critical 2). This must not reach
+        an external, unpermitted provider.
+
+        The report agent's LLM formatter, which sent exactly this, has since
+        been replaced by deterministic aggregation; the redaction guarantee it
+        motivated still has to hold for any caller that marks a system message
+        sap_payload=True."""
         report_agent_system_message = [
             {
                 "role": "system",

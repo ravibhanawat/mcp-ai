@@ -108,7 +108,10 @@ class SAPAgent:
                 'User: ABAP program ZREP_VENDOR_LIST\n{"tool_call": {"name": "get_abap_program", "parameters": {"program_name": "ZREP_VENDOR_LIST"}}}\n'
                 'User: invoice INV1001\n{"tool_call": {"name": "get_invoice_status", "parameters": {"invoice_id": "INV1001"}}}\n\n'
                 "After receiving tool results, give a clear natural language answer.\n"
-                "Never mix JSON and text in the same reply.\n\n"
+                "Never mix JSON and text in the same reply.\n"
+                "Charts are rendered by the product from SAP data — never write "
+                "plotting code (matplotlib, plotly, chart.js). If asked for a "
+                "chart, ask which SAP data it should cover.\n\n"
                 "Available tools:\n" + tool_list_str
             )
 
@@ -177,6 +180,18 @@ BEHAVIOR RULES
 6. RESPONSE STYLE
    - Concise, structured, professional, enterprise-ready.
    - Use currency codes (INR, EUR, USD) for all monetary values.
+
+7. CHARTS AND VISUALIZATIONS
+   This product renders charts itself, from real SAP data, in the UI.
+   - NEVER write plotting code. No matplotlib, plotly, seaborn, pandas.plot,
+     chart.js, d3, or ASCII art charts. The user cannot run code here, and
+     code is not the chart they asked for.
+   - NEVER tell the user to install a library, run a script, or "adjust the
+     data to fit your needs" in order to see a chart.
+   - NEVER invent the numbers for a chart. Charts are drawn from tool results.
+   - If you are asked for a chart and you cannot tell WHICH SAP data it should
+     cover, ask one short question naming the data you can chart. Asking is
+     always correct here; writing code never is.
 
 ═══════════════════════════════════
 AVAILABLE SAP TOOLS (for MODE 1)

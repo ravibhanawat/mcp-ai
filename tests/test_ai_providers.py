@@ -3,6 +3,7 @@ mock, so socket handling, timeouts and error mapping are all exercised for real.
 import asyncio
 import os
 import unittest
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 from ai.errors import AuthFailed, ModelTimeout, ProviderUnavailable, RateLimited
@@ -56,6 +57,22 @@ class TestOllamaChat(unittest.TestCase):
             options = s.requests[0]["options"]
             self.assertAlmostEqual(0.2, options["temperature"])
             self.assertEqual(256, options["num_predict"])
+
+    def test_sends_configured_context_window_as_num_ctx(self):
+        """Ollama silently truncates at its own 4096 default otherwise.
+
+        The report planner sends a multi-thousand-token prompt; without num_ctx
+        it arrived half-cut and the model answered with unrelated prose.
+        """
+        with FakeProviderServer(mode="ok") as s:
+            OllamaProvider(provider_at(s.base_url)).chat(a_model(), MESSAGES)
+            self.assertEqual(4096, s.requests[0]["options"]["num_ctx"])
+
+    def test_num_ctx_tracks_the_model_row(self):
+        with FakeProviderServer(mode="ok") as s:
+            model = replace(a_model(), context_window=32768)
+            OllamaProvider(provider_at(s.base_url)).chat(model, MESSAGES)
+            self.assertEqual(32768, s.requests[0]["options"]["num_ctx"])
 
     def test_unreachable_maps_to_provider_unavailable(self):
         provider = provider_at("http://127.0.0.1:1")   # nothing listens on port 1

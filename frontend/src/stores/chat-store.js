@@ -61,14 +61,28 @@ const useChatStore = create((set, get) => ({
 
   // ── finalizeTurn ───────────────────────────────────────────────────────────
   // Called on 'done' event. Moves streaming state into a permanent message object.
+  //
+  // The widget payloads (report, abap_check, abap_code) only ever arrive on the
+  // 'done' event, and MessageRow reads them off the message — not off msg.done.
+  // Leaving them behind here meant a chart request rendered its "Here is the …"
+  // text with no chart under it, and only appeared after reloading the
+  // conversation from history. Field names match the history loader in App.jsx
+  // so a live turn and a reloaded one render identically.
   finalizeTurn: () => set((prev) => {
+    const done = prev.lastDone || null
     const assistantMsg = {
       id: `asst-${Date.now()}`,
       role: 'assistant',
       content: prev.streamingAnswer,
       status_steps: prev.statusSteps,
       rows: prev.currentRows || null,
-      done: prev.lastDone || null,
+      done,
+      tool_called: done?.tool_called || null,
+      tool_result: done?.tool_result || null,
+      sap_source:  done?.sap_source  || null,
+      report:      done?.report      || null,
+      abap_check:  done?.abap_check  || null,
+      abap_code:   done?.abap_code   || null,
     }
     return { messages: [...prev.messages, assistantMsg] }
   }),

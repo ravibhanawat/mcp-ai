@@ -17,6 +17,9 @@ env/
 users.json
 config.json
 mcp_keys.json
+# Playwright MCP scratch output — claude-desktop-config.json in here carries a
+# live X-MCP-Key header, so the whole directory stays out of the repository.
+.playwright-mcp/
 *.env
 .env
 .env.*

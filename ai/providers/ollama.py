@@ -59,6 +59,14 @@ class OllamaProvider(AIProvider):
             "options": {
                 "temperature": model.temperature if temperature is None else temperature,
                 "num_predict": model.max_tokens if max_tokens is None else max_tokens,
+                # Ollama defaults num_ctx to 4096 regardless of what the model
+                # supports, and silently truncates anything longer — no error,
+                # just a mangled prompt and degenerate output. The report
+                # planner sends ~7.7k tokens of tool registry, so it was being
+                # cut in half and the model answered with matplotlib snippets
+                # instead of plan JSON. Send the context window the model is
+                # actually configured with.
+                "num_ctx": model.context_window,
             },
         }
 
